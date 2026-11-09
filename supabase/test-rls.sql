@@ -107,6 +107,8 @@ begin
 end $$;
 
 reset role;
-do $$ begin raise notice 'OK: todos os testes de isolamento passaram'; end $$;
+-- Se chegou aqui, todas as verificações passaram (uma falha teria parado o script com "FALHOU: ...").
+-- O SQL Editor do Supabase só mostra o resultado do último SELECT, por isso a confirmação é um SELECT.
+select 'OK: todos os testes de isolamento passaram' as resultado;
 
 rollback;
