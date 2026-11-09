@@ -624,6 +624,46 @@ dialog h2 { margin: 0; color: var(--ink); }
 .auth-notice[data-tone="error"] .notice-icon { background: #fbf0ed; color: #a2402d; }
 .auth-notice[data-tone="error"] .notice-icon::before { content: "!"; }
 
+/* =========================================================
+   Encomenda
+   ========================================================= */
+.form-status[data-tone="info"] { color: #2c3e57; background: #eef2f8; padding: 10px 12px; border-left: 2px solid #2c3e57; }
+#checkout-start { margin: 4px 0 12px; }
+.checkout-dialog { width: min(520px, 94vw); }
+.checkout-summary { background: #fff; border: 1px solid var(--line); padding: 4px 14px 12px; }
+.checkout-lines { list-style: none; margin: 0; padding: 0; max-height: 240px; overflow: auto; }
+.checkout-lines li { display: flex; align-items: center; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--line); font-size: 13px; }
+.checkout-lines .cart-thumb { background: var(--soft); }
+.line-info { flex: 1; min-width: 0; }
+.line-info small { display: block; color: var(--muted); font-size: 11px; margin-top: 2px; }
+.line-price { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.checkout-totals { margin: 10px 0 0; display: grid; gap: 6px; font-size: 13px; }
+.checkout-totals div { display: flex; justify-content: space-between; }
+.checkout-totals dt { color: var(--muted); }
+.checkout-totals dd { margin: 0; font-variant-numeric: tabular-nums; }
+.checkout-totals .grand { padding-top: 8px; border-top: 1px solid var(--line); font-size: 15px; font-weight: 600; }
+.checkout-totals .grand dt { color: var(--ink); }
+.hint { margin: 8px 0 0; font-size: 11px; color: var(--muted); }
+.checkout-dialog fieldset { border: 0; padding: 0; margin: 0; display: grid; gap: 12px; }
+.checkout-dialog legend { font-size: 13px; font-weight: 600; margin-bottom: 10px; padding: 0; }
+.field-row { display: grid; grid-template-columns: 130px minmax(0, 1fr); gap: 10px; }
+.pay-note { margin: 0; font-size: 12px; line-height: 1.55; color: #3a4146; background: var(--soft); padding: 10px 12px; }
+.spinner.dark { display: inline-block; vertical-align: -2px; border-color: rgba(0, 0, 0, .15); border-top-color: var(--ink); }
+
+.orders-list { display: grid; gap: 12px; }
+.order-card { background: #fff; border: 1px solid var(--line); padding: 14px; }
+.order-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+.order-card .muted { margin: 4px 0 8px; }
+.order-card ul { list-style: none; margin: 0; padding: 0; font-size: 13px; }
+.order-card li { display: flex; gap: 6px; align-items: baseline; padding: 4px 0; }
+.order-card li small { color: var(--muted); font-size: 11px; }
+.order-card li span { margin-left: auto; font-variant-numeric: tabular-nums; }
+.order-foot { display: flex; justify-content: space-between; margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--line); font-size: 13px; }
+.order-status { font-size: 11px; padding: 4px 10px; border-radius: 999px; background: #fbf3e4; color: #8a5a12; white-space: nowrap; }
+.order-status[data-status="paid"], .order-status[data-status="delivered"] { background: #eef6ef; color: #2f6b3a; }
+.order-status[data-status="shipped"] { background: #eef2f8; color: #2c3e57; }
+.order-status[data-status="cancelled"] { background: #fbf0ed; color: #a2402d; }
+
 /* ---------- Ecrãs grandes ---------- */
 @media (min-width: 1600px) {
   main { grid-template-columns: 1fr 400px; }
@@ -671,6 +711,8 @@ dialog h2 { margin: 0; color: var(--ink); }
 
 /* ---------- Telemóveis ---------- */
 @media (max-width: 600px) {
+  .field-row { grid-template-columns: 1fr; }
+  .checkout-lines { max-height: none; }
   .user-name, .chevron { display: none; }
   #user-button { padding: 4px; }
   .auth-link { padding: 7px 12px; font-size: 12.5px; }

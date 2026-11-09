@@ -516,6 +516,7 @@
         if (newSession) setTimeout(loadProfile, 0);
       }
       if (event === 'SIGNED_OUT') profile = null;
+      document.dispatchEvent(new CustomEvent('forma:auth', { detail: { event, session: newSession } }));
     });
 
     // Espera que o cliente restaure a sessão guardada e troque o ?code= (se houver)
@@ -535,6 +536,21 @@
       toast(`Sessão iniciada. Olá, ${displayName()}!`);
     }
   }
+
+  /* API para outras partes do site (checkout.js) */
+  window.FORMA_AUTH = {
+    get client() { return client; },
+    get session() { return session; },
+    get profileName() { return displayName(); },
+    get problem() { return setupProblem; },
+    // Abre o "Entrar" com uma explicação (ex.: para continuar a encomenda)
+    openLogin(message) {
+      if (setupProblem) { notice('Iniciar sessão', setupProblem, { tone: 'error' }); return; }
+      showView('login');
+      if (message) setStatus($('auth-login'), message, 'info');
+    },
+    errorText: ptError,
+  };
 
   document.body.classList.add('auth-pending');
   start().catch(err => {

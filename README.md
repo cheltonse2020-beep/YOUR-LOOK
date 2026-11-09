@@ -14,10 +14,14 @@ Não precisa de npm nem de compilação.
 - `style.css` — cores (variáveis em `:root`), disposição, animações e telemóvel.
 - `app.js` — dados (`LOOKS`), ilustrações (`figure`), carrossel, pontos e cesto.
 - `auth.js` — autenticação (Supabase Auth) e "A minha conta".
+- `checkout.js` — "Prosseguir com a encomenda", entrega, confirmação e "As minhas encomendas".
 - `config.example.js` — modelo de configuração; copiar para `config.js` (ignorado pelo git).
 - `supabase/schema.sql` — tabela `profiles`, trigger de criação automática, RLS e proteção de `is_admin`.
 - `supabase/test-rls.sql` — teste de isolamento entre dois utilizadores (corre e faz rollback).
 - `supabase/verify-auth.mjs` — verificação real, pela API, com duas contas de teste.
+- `supabase/orders.sql` — catálogo de preços, encomendas, linhas, RLS e função `place_order`.
+- `supabase/products.sql` — preços oficiais (gerado por `supabase/generate-products.mjs` a partir de `app.js`).
+- `supabase/test-orders.sql` — teste das encomendas (preços no servidor, validação, isolamento; faz rollback).
 
 ## Editar os looks
 Os 30 looks da coleção principal estão em `LOOK_TABLE` (`app.js`), uma linha por look:
@@ -91,5 +95,21 @@ Registo com nome/email/palavra-passe e confirmação por email, entrar com email
 ### Tornar alguém administrador
 Só pelo SQL Editor (nunca a partir do site): `update public.profiles set is_admin = true where id = '<uuid do utilizador>';`
 
+## Encomendas
+No cesto, **Prosseguir com a encomenda** pede início de sessão (o cesto fica guardado e a encomenda reabre sozinha depois de entrar), mostra o resumo agrupado, pede os dados de entrega (Portugal) e regista a encomenda no Supabase como **a aguardar pagamento**. O cliente vê-as em **As minhas encomendas** (menu do nome).
+
+Segurança:
+- O browser envia só **SKU, tamanho e quantidade**. Preços, portes (grátis a partir de 100 €, senão 4,90 €) e total são calculados na base de dados (`place_order`), a partir da tabela `products`.
+- Os clientes não escrevem diretamente em `orders`/`order_items` e não podem alterar o estado; RLS garante que cada um só vê as suas.
+
+Configurar (SQL Editor, por esta ordem, depois de `schema.sql`):
+1. `supabase/orders.sql`
+2. `supabase/products.sql`
+3. `supabase/test-orders.sql` → deve terminar com `OK: todos os testes de encomendas passaram`.
+
+Se mudares peças ou preços em `app.js`: `node supabase/generate-products.mjs` e volta a executar `products.sql`.
+
+Gerir estados (pela loja, no SQL Editor ou no Table Editor): `update public.orders set status = 'paid' where number = 1001;` (estados: `pending_payment`, `paid`, `shipped`, `delivered`, `cancelled`).
+
 ## Limitações
-O cesto usa `localStorage` (não está ligado à conta). Não há stock, encomendas nem pagamentos. Os preços e a marca são exemplos.
+O cesto usa `localStorage` (não está ligado à conta). Não há pagamento online nem gestão de stock: as encomendas ficam a aguardar pagamento. Os preços e a marca são exemplos.

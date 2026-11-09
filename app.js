@@ -190,6 +190,11 @@ const CATEGORIES = [
   },
 ];
 
+// Código estável de cada peça (SKU) — é o que se envia ao servidor nas encomendas.
+// O preço nunca vem do browser: a base de dados (supabase/products.sql) é a fonte de verdade.
+[['top', TOPS], ['pants', PANTS], ['shoes', SHOES]].forEach(([kind, catalog]) =>
+  Object.entries(catalog).forEach(([key, piece]) => { piece.sku = `${kind}:${key}`; }));
+
 const withDetail = p => ({ ...p, detail: p.fabric ? `${p.colorName} · ${p.fabric}` : p.colorName });
 
 const makeLook = ([name, body, top, pants, shoes, mood], cats) => ({
@@ -780,6 +785,7 @@ function updateBag() {
   $('cart-total').textContent = money(total);
   $('cart-total-row').hidden = !bag.length;
   $('clear').hidden = !bag.length;
+  if ($('checkout-start')) $('checkout-start').hidden = !bag.length;
 }
 
 /* =========================================================

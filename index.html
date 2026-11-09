@@ -39,6 +39,7 @@
         </button>
         <div class="user-dropdown" id="user-dropdown" role="menu" hidden>
           <button type="button" role="menuitem" id="menu-account">A minha conta</button>
+          <button type="button" role="menuitem" id="menu-orders">As minhas encomendas</button>
           <button type="button" role="menuitem" id="menu-signout">Terminar sessão</button>
         </div>
       </div>
@@ -138,8 +139,68 @@
     </div>
     <div id="cart-items"></div>
     <div class="total" id="cart-total-row"><span>Total</span><strong id="cart-total"></strong></div>
+    <button class="primary" id="checkout-start" type="button" hidden>Prosseguir com a encomenda →</button>
     <button id="clear" type="button">Esvaziar cesto</button>
-    <p class="note">Protótipo local. O cesto é guardado neste navegador.</p>
+    <p class="note">O cesto é guardado neste navegador. Para encomendar é preciso iniciar sessão.</p>
+  </dialog>
+
+  <!-- Encomenda: resumo + entrega → confirmação; e histórico de encomendas -->
+  <dialog id="checkout" class="auth-dialog checkout-dialog" aria-labelledby="checkout-title">
+    <button id="checkout-close" class="auth-close" type="button" aria-label="Fechar">✕</button>
+
+    <form id="checkout-form" class="auth-form" novalidate hidden>
+      <h2 id="checkout-title">Finalizar encomenda</h2>
+      <div class="checkout-summary">
+        <ul id="checkout-lines" class="checkout-lines"></ul>
+        <dl class="checkout-totals">
+          <div><dt>Subtotal</dt><dd id="checkout-subtotal"></dd></div>
+          <div><dt>Portes</dt><dd id="checkout-shipping"></dd></div>
+          <div class="grand"><dt>Total</dt><dd id="checkout-total"></dd></div>
+        </dl>
+        <p class="hint">Portes grátis a partir de 100 €. O total final é calculado no servidor.</p>
+      </div>
+
+      <fieldset>
+        <legend>Entrega em Portugal</legend>
+        <label>Nome completo
+          <input name="ship_name" type="text" autocomplete="name" maxlength="80" required>
+        </label>
+        <label>Morada
+          <input name="address" type="text" autocomplete="street-address" maxlength="200" required>
+        </label>
+        <div class="field-row">
+          <label>Código postal
+            <input name="postal" type="text" autocomplete="postal-code" inputmode="numeric" placeholder="0000-000" maxlength="8" required>
+          </label>
+          <label>Localidade
+            <input name="city" type="text" autocomplete="address-level2" maxlength="80" required>
+          </label>
+        </div>
+        <label>Telefone
+          <input name="phone" type="tel" autocomplete="tel" inputmode="tel" maxlength="20" required>
+        </label>
+        <label><span>Notas para a entrega <small>(opcional)</small></span>
+          <input name="notes" type="text" maxlength="500">
+        </label>
+      </fieldset>
+
+      <p class="pay-note">O pagamento online ainda não está disponível: a encomenda fica registada como <strong>a aguardar pagamento</strong> e entramos em contacto para concluir.</p>
+      <p class="form-status" role="alert" aria-live="polite"></p>
+      <button class="primary" type="submit">Confirmar encomenda</button>
+    </form>
+
+    <div id="checkout-done" class="auth-form auth-notice" data-tone="ok" hidden>
+      <span class="notice-icon" aria-hidden="true"></span>
+      <h2>Encomenda registada</h2>
+      <p id="checkout-done-text"></p>
+      <button class="primary" type="button" id="checkout-see-orders">Ver as minhas encomendas</button>
+    </div>
+
+    <div id="orders-view" class="auth-form" hidden>
+      <h2>As minhas encomendas</h2>
+      <p class="form-status" role="alert" aria-live="polite"></p>
+      <div id="orders-list" class="orders-list"></div>
+    </div>
   </dialog>
 
   <!-- Autenticação (Supabase Auth) -->
@@ -186,7 +247,7 @@
       <label>Email
         <input name="email" type="email" autocomplete="email" inputmode="email" required>
       </label>
-      <label>Palavra-passe <small>(mínimo 8 caracteres)</small>
+      <label><span>Palavra-passe <small>(mínimo 8 caracteres)</small></span>
         <span class="password-field">
           <input name="password" type="password" autocomplete="new-password" minlength="8" required>
           <button type="button" class="show-password" aria-pressed="false">Mostrar</button>
@@ -262,5 +323,6 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.118.0/dist/umd/supabase.min.js"></script>
   <script src="config.js" onerror="window.FORMA_CONFIG = window.FORMA_CONFIG || null"></script>
   <script src="auth.js"></script>
+  <script src="checkout.js"></script>
 </body>
 </html>
