@@ -73,8 +73,10 @@ begin
         raise exception 'FALHOU: alterou o preço de uma linha'; exception when insufficient_privilege then null; end;
   begin delete from public.orders;
         raise exception 'FALHOU: apagou encomendas'; exception when insufficient_privilege then null; end;
-  begin update public.products set price = 0.01;
-        raise exception 'FALHOU: alterou o preço do catálogo'; exception when insufficient_privilege then null; end;
+  -- Bloqueado por privilégios (antes de admin.sql) ou pelo RLS (depois): o preço não muda
+  begin update public.products set price = 0.01 where sku = 'top:greySweat';
+  exception when insufficient_privilege then null; end;
+  assert (select price from public.products where sku = 'top:greySweat') = 44.90, 'FALHOU: alterou o preço do catálogo';
 end $$;
 
 -- ---------- Cliente B: não vê nada da cliente A ----------

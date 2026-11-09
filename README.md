@@ -15,6 +15,10 @@ Não precisa de npm nem de compilação.
 - `app.js` — dados (`LOOKS`), ilustrações (`figure`), carrossel, pontos e cesto.
 - `auth.js` — autenticação (Supabase Auth) e "A minha conta".
 - `checkout.js` — "Prosseguir com a encomenda", entrega, confirmação e "As minhas encomendas".
+- `catalog.js` — junta à loja as categorias e os looks publicados no painel (Supabase).
+- `admin/` — painel de administração (`/admin/`): `index.html`, `admin.css`, `admin.js`.
+- `supabase/admin.sql` — migração do painel (categorias, looks, variantes/stock, estados de pagamento e envio, funções `admin_*`, RLS e Storage).
+- `supabase/test-admin.sql` — teste de permissões, stock, publicação e envios (faz rollback).
 - `config.example.js` — modelo de configuração; copiar para `config.js` (ignorado pelo git).
 - `supabase/schema.sql` — tabela `profiles`, trigger de criação automática, RLS e proteção de `is_admin`.
 - `supabase/test-rls.sql` — teste de isolamento entre dois utilizadores (corre e faz rollback).
@@ -142,6 +146,32 @@ Segurança:
 6. Testar com o cartão de teste `4242 4242 4242 4242`, qualquer data futura e qualquer CVC. A encomenda deve passar a **Paga** em "As minhas encomendas".
 
 Para produção: trocar para as chaves `sk_live_...`, criar o webhook em modo live com o novo `whsec_...` e atualizar `SITE_URL`.
+
+## Painel de administração (`/admin/`)
+Abre `http://localhost:5500/admin/`. Áreas: **Visão geral** (métricas reais, stock baixo, últimas encomendas), **Looks e carrossel** (criar, editar, publicar, arquivar, ordem, imagem do modelo, produtos e preço do conjunto, pré-visualização), **Produtos** (fotografias, preço, estado, variantes de cor/tamanho com stock), **Categorias** (nome, imagem, ordem, visibilidade) e **Encomendas** (pesquisa, filtros, detalhe, preparação/envio).
+
+Segurança — tudo é validado no Supabase, não no browser:
+- `public.is_admin()` lê `profiles.is_admin`, que o utilizador não pode alterar (privilégios de coluna + trigger). O painel só abre se a base de dados o confirmar; mesmo forçando a interface, RLS e as funções `admin_*` recusam quem não é administrador.
+- Clientes e visitantes só **leem** categorias visíveis, produtos e looks publicados. Não alteram produtos, stock, looks, categorias nem encomendas. O stock (variantes) não é público.
+- Imagens: buckets `looks` (PNG/WebP) e `catalog` (PNG/JPEG/WebP), leitura pública, escrita só para administradores, máximo 5 MB.
+- Encomendas: **pagamento** (`payment_status`) e **envio** (`fulfillment_status`) são separados. O pagamento só muda pelo webhook da Stripe; o painel só gere preparação/envio, não envia sem pagamento confirmado, e cancelar repõe o stock (o reembolso faz-se na Stripe). As linhas mantêm nome, cor, tamanho e preço do momento da compra.
+- Produtos e looks **arquivam-se**, não se apagam. Um look só é publicado com imagem e pelo menos um produto publicado.
+
+Na loja, os looks publicados entram no carrossel circular à frente da coleção original, pela ordem definida no painel. `index.html?preview=<id>` mostra um rascunho só a administradores.
+
+### Configurar
+1. **SQL Editor**: executar `supabase/admin.sql` (depois de `schema.sql`, `orders.sql`, `products.sql`, `payments.sql`). Só acrescenta; não apaga dados.
+2. Executar de novo `supabase/products.sql` (preenche cor/forma dos ícones; não altera preços nem estados).
+3. **SQL Editor**: `supabase/test-admin.sql` → `OK: todos os testes de administração passaram`.
+4. **Primeiro administrador** (a conta tem de existir e estar confirmada):
+   ```sql
+   update public.profiles set is_admin = true
+    where id = (select id from auth.users where email = 'o-teu-email@exemplo.pt');
+   ```
+   Só é possível no SQL Editor (quem gere o projeto Supabase). Para retirar: `is_admin = false`.
+5. Se já tinhas publicado a função `stripe-webhook`, publica de novo a versão atual (também grava `payment_status`). A versão antiga continua a funcionar graças a um trigger de compatibilidade.
+
+Stock: produtos **com** variantes ativas só se vendem nas variantes com stock (descontado ao encomendar, reposto ao cancelar). Produtos **sem** variantes vendem-se nos tamanhos padrão, sem controlo de stock. A loja ainda não esconde tamanhos esgotados: o servidor recusa e o cliente vê a mensagem.
 
 ## Limitações
 O cesto usa `localStorage` (não está ligado à conta). Não há gestão de stock nem reembolsos automáticos (fazem-se no painel da Stripe; o estado da encomenda muda-se no Supabase). Os preços e a marca são exemplos.

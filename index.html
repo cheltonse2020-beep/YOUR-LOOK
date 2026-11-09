@@ -40,6 +40,7 @@
         <div class="user-dropdown" id="user-dropdown" role="menu" hidden>
           <button type="button" role="menuitem" id="menu-account">A minha conta</button>
           <button type="button" role="menuitem" id="menu-orders">As minhas encomendas</button>
+          <a role="menuitem" id="menu-admin" href="admin/" hidden>Painel de administração</a>
           <button type="button" role="menuitem" id="menu-signout">Terminar sessão</button>
         </div>
       </div>
@@ -61,6 +62,7 @@
         <p id="intro-text">Conjuntos, do primeiro ao último pormenor.<br>Toca no modelo para o ampliar.</p>
       </div>
 
+      <p id="preview-banner" class="preview-banner" role="status" hidden></p>
       <div id="models" aria-label="Selecionar conjunto"></div>
       <div id="pins"></div>
 
@@ -349,5 +351,6 @@
   <script src="config.js" onerror="window.FORMA_CONFIG = window.FORMA_CONFIG || null"></script>
   <script src="auth.js"></script>
   <script src="checkout.js"></script>
+  <script src="catalog.js"></script>
 </body>
 </html>

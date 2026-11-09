@@ -16,27 +16,40 @@ const { TOPS, PANTS, SHOES } = vm.runInNewContext(`${src.slice(0, dataEnd)}\n;({
 
 const q = s => `'${String(s).replace(/'/g, "''")}'`;
 const rows = [];
+const looks = [];
 for (const [kind, catalog] of [['top', TOPS], ['pants', PANTS], ['shoes', SHOES]]) {
   for (const [key, p] of Object.entries(catalog)) {
     if (!/^[A-Za-z0-9]+$/.test(key)) throw new Error(`Chave inválida: ${key}`);
-    rows.push(`  (${q(`${kind}:${key}`)}, ${q(kind)}, ${q(p.name)}, ${q(p.colorName)}, ${Number(p.price).toFixed(2)}, true)`);
+    const sku = `${kind}:${key}`;
+    rows.push(`  (${q(sku)}, ${q(kind)}, ${q(p.name)}, ${q(p.colorName)}, ${Number(p.price).toFixed(2)}, true)`);
+    looks.push(`      (${q(sku)}, ${q(p.color)}, ${p.style ? q(p.style) : 'null'})`);
   }
 }
 
 const sql = `-- =====================================================================
--- FORMA — catálogo de produtos (GERADO por supabase/generate-products.mjs)
--- Não editar à mão: altera app.js e volta a gerar.
--- Executar no SQL Editor depois de orders.sql. Pode ser executado várias vezes.
+-- FORMA — catálogo inicial de produtos (GERADO por supabase/generate-products.mjs)
+-- Não editar à mão. Executar no SQL Editor depois de orders.sql (e de novo após admin.sql).
+-- Só ACRESCENTA produtos que ainda não existem: nunca altera preços, nomes ou
+-- estados definidos no painel de administração.
 -- =====================================================================
 insert into public.products (sku, kind, name, color_name, price, active) values
 ${rows.join(',\n')}
-on conflict (sku) do update
-  set kind = excluded.kind, name = excluded.name, color_name = excluded.color_name,
-      price = excluded.price, active = true;
+on conflict (sku) do nothing;
 
--- Peças que deixaram de existir em app.js ficam inativas (as encomendas antigas mantêm-se).
-update public.products set active = false
- where sku not in (${rows.map(r => r.match(/^\s*\('([^']+)'/)[1]).map(q).join(', ')});
+-- Cor e forma usadas nos ícones da loja (só preenche se estiverem vazias; requer admin.sql)
+do $$
+begin
+  if exists (select 1 from information_schema.columns
+              where table_schema = 'public' and table_name = 'products' and column_name = 'color_hex') then
+    update public.products p
+       set color_hex = coalesce(p.color_hex, v.color_hex),
+           style = coalesce(p.style, v.style)
+      from (values
+${looks.join(',\n')}
+      ) as v(sku, color_hex, style)
+     where p.sku = v.sku and (p.color_hex is null or p.style is null);
+  end if;
+end $$;
 `;
 
 writeFileSync(join(here, 'products.sql'), sql);

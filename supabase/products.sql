@@ -1,7 +1,8 @@
 -- =====================================================================
--- FORMA — catálogo de produtos (GERADO por supabase/generate-products.mjs)
--- Não editar à mão: altera app.js e volta a gerar.
--- Executar no SQL Editor depois de orders.sql. Pode ser executado várias vezes.
+-- FORMA — catálogo inicial de produtos (GERADO por supabase/generate-products.mjs)
+-- Não editar à mão. Executar no SQL Editor depois de orders.sql (e de novo após admin.sql).
+-- Só ACRESCENTA produtos que ainda não existem: nunca altera preços, nomes ou
+-- estados definidos no painel de administração.
 -- =====================================================================
 insert into public.products (sku, kind, name, color_name, price, active) values
   ('top:greySweat', 'top', 'Sweatshirt Heavyweight', 'Cinzento mescla', 44.90, true),
@@ -72,10 +73,86 @@ insert into public.products (sku, kind, name, color_name, price, active) values
   ('shoes:runnerBlue', 'shoes', 'Sapatilhas Running', 'Azul', 119.90, true),
   ('shoes:trainer', 'shoes', 'Sapatilhas Training', 'Preto', 89.90, true),
   ('shoes:trainerWhite', 'shoes', 'Sapatilhas Training', 'Branco', 89.90, true)
-on conflict (sku) do update
-  set kind = excluded.kind, name = excluded.name, color_name = excluded.color_name,
-      price = excluded.price, active = true;
+on conflict (sku) do nothing;
 
--- Peças que deixaram de existir em app.js ficam inativas (as encomendas antigas mantêm-se).
-update public.products set active = false
- where sku not in ('top:greySweat', 'top:greenKnit', 'top:rustSweat', 'top:navyKnit', 'top:creamCable', 'top:blackSweat', 'top:oatSweat', 'top:wineKnit', 'top:skySweat', 'top:whiteTee', 'top:blackTee', 'top:sageTee', 'top:sandTee', 'top:brickTee', 'top:navyTee', 'top:greyTee', 'top:mustardTee', 'top:whiteShirt', 'top:skyShirt', 'top:blackShirt', 'top:wineShirt', 'top:blackTank', 'top:greyTank', 'top:navyTank', 'top:limeTee', 'top:orangeRunTee', 'top:blueRunTee', 'top:whiteRunTank', 'top:linenCamp', 'top:terraCamp', 'top:sageCamp', 'pants:midJeans', 'pants:washJeans', 'pants:iceJeans', 'pants:rawJeans', 'pants:blackJeans', 'pants:ecruCanvas', 'pants:brownChino', 'pants:greyChino', 'pants:oliveChino', 'pants:blackTrous', 'pants:khakiChino', 'pants:navyTrous', 'pants:creamChino', 'pants:charcoalSuit', 'pants:blackJogger', 'pants:greyJogger', 'pants:blackShorts', 'pants:navyRunShorts', 'pants:blackRunShorts', 'pants:swimBlue', 'pants:swimCoral', 'pants:linenShorts', 'pants:stoneShorts', 'shoes:court', 'shoes:skate', 'shoes:derby', 'shoes:runner', 'shoes:boot', 'shoes:suede', 'shoes:loafer', 'shoes:trail', 'shoes:sandal', 'shoes:slide', 'shoes:runnerOrange', 'shoes:runnerBlue', 'shoes:trainer', 'shoes:trainerWhite');
+-- Cor e forma usadas nos ícones da loja (só preenche se estiverem vazias; requer admin.sql)
+do $$
+begin
+  if exists (select 1 from information_schema.columns
+              where table_schema = 'public' and table_name = 'products' and column_name = 'color_hex') then
+    update public.products p
+       set color_hex = coalesce(p.color_hex, v.color_hex),
+           style = coalesce(p.style, v.style)
+      from (values
+      ('top:greySweat', '#8b8f96', 'sweater'),
+      ('top:greenKnit', '#5d7a4c', 'sweater'),
+      ('top:rustSweat', '#8a3f2d', 'sweater'),
+      ('top:navyKnit', '#2e3a55', 'sweater'),
+      ('top:creamCable', '#e9e2d0', 'sweater'),
+      ('top:blackSweat', '#1f2023', 'sweater'),
+      ('top:oatSweat', '#c9b79a', 'sweater'),
+      ('top:wineKnit', '#5e2430', 'sweater'),
+      ('top:skySweat', '#9db7cf', 'sweater'),
+      ('top:whiteTee', '#f2f2ee', 'tee'),
+      ('top:blackTee', '#232327', 'tee'),
+      ('top:sageTee', '#a9b69a', 'tee'),
+      ('top:sandTee', '#d8c7a8', 'tee'),
+      ('top:brickTee', '#a2503a', 'tee'),
+      ('top:navyTee', '#2c3650', 'tee'),
+      ('top:greyTee', '#b4b7bb', 'tee'),
+      ('top:mustardTee', '#c99a3a', 'tee'),
+      ('top:whiteShirt', '#f4f3ef', 'shirt'),
+      ('top:skyShirt', '#b9cde2', 'shirt'),
+      ('top:blackShirt', '#1c1c1f', 'shirt'),
+      ('top:wineShirt', '#5a1f2b', 'shirt'),
+      ('top:blackTank', '#1f2124', 'tank'),
+      ('top:greyTank', '#9a9ea4', 'tank'),
+      ('top:navyTank', '#2a3550', 'tank'),
+      ('top:limeTee', '#c6d64a', 'tee'),
+      ('top:orangeRunTee', '#e0723a', 'tee'),
+      ('top:blueRunTee', '#3a6fd8', 'tee'),
+      ('top:whiteRunTank', '#f1f1ee', 'tank'),
+      ('top:linenCamp', '#e6dcc6', 'camp'),
+      ('top:terraCamp', '#c4673f', 'camp'),
+      ('top:sageCamp', '#9fb39a', 'camp'),
+      ('pants:midJeans', '#58799c', 'baggy'),
+      ('pants:washJeans', '#8ea2a6', 'baggy'),
+      ('pants:iceJeans', '#8fb0d4', 'baggy'),
+      ('pants:rawJeans', '#2f3d55', 'baggy'),
+      ('pants:blackJeans', '#2b2c2f', 'baggy'),
+      ('pants:ecruCanvas', '#ddd5c2', 'baggy'),
+      ('pants:brownChino', '#7b5637', 'straight'),
+      ('pants:greyChino', '#8a8e8e', 'straight'),
+      ('pants:oliveChino', '#5c5f3b', 'straight'),
+      ('pants:blackTrous', '#26272a', 'straight'),
+      ('pants:khakiChino', '#b19e7a', 'straight'),
+      ('pants:navyTrous', '#2f3a52', 'straight'),
+      ('pants:creamChino', '#e4dccb', 'straight'),
+      ('pants:charcoalSuit', '#34363a', 'straight'),
+      ('pants:blackJogger', '#222326', 'jogger'),
+      ('pants:greyJogger', '#8d9196', 'jogger'),
+      ('pants:blackShorts', '#222326', 'shorts'),
+      ('pants:navyRunShorts', '#283350', 'runshorts'),
+      ('pants:blackRunShorts', '#1e1f22', 'runshorts'),
+      ('pants:swimBlue', '#2f7fa8', 'runshorts'),
+      ('pants:swimCoral', '#e27a63', 'runshorts'),
+      ('pants:linenShorts', '#d9c9a6', 'shorts'),
+      ('pants:stoneShorts', '#b8b2a3', 'shorts'),
+      ('shoes:court', '#ecebe6', null),
+      ('shoes:skate', '#2c2c2e', null),
+      ('shoes:derby', '#6b4528', null),
+      ('shoes:runner', '#e3e1d9', null),
+      ('shoes:boot', '#1e1e20', null),
+      ('shoes:suede', '#8c8a86', null),
+      ('shoes:loafer', '#4a1f22', null),
+      ('shoes:trail', '#4f6b4a', null),
+      ('shoes:sandal', '#6e4a2f', 'sandal'),
+      ('shoes:slide', '#1d1d1f', 'sandal'),
+      ('shoes:runnerOrange', '#e46a32', null),
+      ('shoes:runnerBlue', '#3c63c9', null),
+      ('shoes:trainer', '#232325', null),
+      ('shoes:trainerWhite', '#efefec', null)
+      ) as v(sku, color_hex, style)
+     where p.sku = v.sku and (p.color_hex is null or p.style is null);
+  end if;
+end $$;

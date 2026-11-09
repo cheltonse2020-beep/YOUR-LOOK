@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="pt">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="robots" content="noindex, nofollow">
+  <title>FORMA — Administração</title>
+  <link rel="stylesheet" href="admin.css">
+</head>
+<body>
+  <!-- Acesso: o painel só abre depois de o Supabase confirmar que a conta é administradora -->
+  <div id="gate" class="gate">
+    <div class="gate-card">
+      <span class="brand">FORMA<sup>®</sup> <em>Admin</em></span>
+
+      <div id="gate-loading" class="gate-view">
+        <p class="muted"><span class="spinner dark" aria-hidden="true"></span> A verificar acesso…</p>
+      </div>
+
+      <form id="gate-login" class="gate-view form" novalidate hidden>
+        <h1>Entrar no painel</h1>
+        <p class="muted">Área reservada a administradores.</p>
+        <label>Email <input name="email" type="email" autocomplete="email" required></label>
+        <label>Palavra-passe <input name="password" type="password" autocomplete="current-password" required></label>
+        <p class="form-status" role="alert" aria-live="polite"></p>
+        <button class="btn primary" type="submit">Entrar</button>
+        <p class="muted small">Entraste na loja com Google? Inicia sessão na <a href="../index.html">loja</a> e volta a esta página.</p>
+      </form>
+
+      <div id="gate-denied" class="gate-view" hidden>
+        <h1>Acesso recusado</h1>
+        <p>A conta <strong id="denied-email"></strong> não tem permissão de administrador.</p>
+        <p class="muted small">As permissões são atribuídas apenas no Supabase, por quem gere o projeto.</p>
+        <div class="row-actions">
+          <button class="btn" type="button" id="denied-signout">Terminar sessão</button>
+          <a class="btn primary" href="../index.html">Voltar à loja</a>
+        </div>
+      </div>
+
+      <div id="gate-error" class="gate-view" hidden>
+        <h1>Painel indisponível</h1>
+        <p id="gate-error-text"></p>
+        <a class="btn" href="../index.html">Voltar à loja</a>
+      </div>
+    </div>
+  </div>
+
+  <div id="app" class="app" hidden>
+    <aside class="sidebar">
+      <a class="brand" href="#overview">FORMA<sup>®</sup> <em>Admin</em></a>
+      <nav class="nav" aria-label="Secções">
+        <a href="#overview" data-section="overview">
+          <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3 3h6v8H3zM11 3h6v5h-6zM11 10h6v7h-6zM3 13h6v4H3z"/></svg>Visão geral</a>
+        <a href="#looks" data-section="looks">
+          <svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="4.5" r="2.2"/><path d="M6 18V9.5Q6 7.5 8 7.5h4q2 0 2 2V18M8 12v6M12 12v6"/></svg>Looks e carrossel</a>
+        <a href="#products" data-section="products">
+          <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M7 3 3 5.5 4.5 9 6 8.3V17h8V8.3l1.5.7L17 5.5 13 3q-3 2.5-6 0z"/></svg>Produtos</a>
+        <a href="#categories" data-section="categories">
+          <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3 4h6v5H3zM11 4h6v5h-6zM3 11h6v5H3zM11 11h6v5h-6z"/></svg>Categorias</a>
+        <a href="#orders" data-section="orders">
+          <svg viewBox="0 0 20 20" aria-hidden="true"><rect x="4" y="7" width="12" height="10" rx="1"/><path d="M7.5 7V5.5a2.5 2.5 0 0 1 5 0V7"/></svg>Encomendas</a>
+      </nav>
+      <div class="sidebar-foot">
+        <span class="user" id="user-email"></span>
+        <a href="../index.html" target="_blank" rel="noopener">Ver loja ↗</a>
+        <button type="button" id="signout">Terminar sessão</button>
+      </div>
+    </aside>
+
+    <main class="main">
+      <header class="topbar">
+        <h1 id="section-title"></h1>
+        <div id="section-actions" class="row-actions"></div>
+      </header>
+      <div id="content" class="content" aria-live="polite"></div>
+    </main>
+  </div>
+
+  <!-- Formulários e detalhes -->
+  <dialog id="drawer" class="drawer" aria-labelledby="drawer-title">
+    <form id="drawer-form" novalidate>
+      <header class="drawer-head">
+        <h2 id="drawer-title"></h2>
+        <button type="button" class="icon-btn" id="drawer-close" aria-label="Fechar">✕</button>
+      </header>
+      <div id="drawer-body" class="drawer-body"></div>
+      <footer class="drawer-foot">
+        <p class="form-status" id="drawer-status" role="alert" aria-live="polite"></p>
+        <div id="drawer-actions" class="row-actions"></div>
+      </footer>
+    </form>
+  </dialog>
+
+  <!-- Confirmação de ações destrutivas -->
+  <dialog id="confirm" class="confirm" aria-labelledby="confirm-title">
+    <h2 id="confirm-title"></h2>
+    <p id="confirm-text"></p>
+    <div class="row-actions">
+      <button type="button" class="btn" id="confirm-cancel">Cancelar</button>
+      <button type="button" class="btn primary" id="confirm-ok"></button>
+    </div>
+  </dialog>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.118.0/dist/umd/supabase.min.js"></script>
+  <script src="../config.js" onerror="window.FORMA_CONFIG = window.FORMA_CONFIG || null"></script>
+  <script src="admin.js"></script>
+</body>
+</html>

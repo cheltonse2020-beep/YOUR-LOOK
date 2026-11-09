@@ -34,13 +34,12 @@
       lines.set(key, line);
     };
     bag.forEach(item => {
-      const look = LOOKS[item.look];
+      const look = bagLook(item);
+      if (!look) return;
       if (item.type === 'piece') {
-        add(look.pieces[item.piece], item.size);
-      } else {                      // conjunto completo = 3 peças
-        add(look.pieces[0], item.size);
-        add(look.pieces[1], item.size);
-        add(look.pieces[2], item.shoe);
+        if (look.pieces[item.piece]) add(look.pieces[item.piece], item.size);
+      } else {                      // conjunto completo = todas as peças do look
+        look.pieces.forEach(p => add(p, p.kind === 'shoes' ? item.shoe : item.size));
       }
     });
     return [...lines.values()];
@@ -88,7 +87,7 @@
 
     $('checkout-lines').innerHTML = lines.map(l => `
       <li>
-        <span class="cart-thumb">${icon(l.piece)}</span>
+        <span class="cart-thumb">${pieceThumb(l.piece)}</span>
         <span class="line-info">${escapeHtml(l.piece.name)}<small>${escapeHtml(l.piece.colorName)} · ${l.piece.kind === 'shoes' ? 'Número' : 'Tamanho'} ${escapeHtml(l.size)}${l.qty > 1 ? ` · ${l.qty} unid.` : ''}</small></span>
         <span class="line-price">${money(l.piece.price * l.qty)}</span>
       </li>`).join('');

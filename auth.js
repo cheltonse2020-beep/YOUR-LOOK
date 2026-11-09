@@ -186,6 +186,7 @@
       $('user-name').textContent = name;
       $('user-initial').textContent = (name[0] || '?').toUpperCase();
       $('user-button').setAttribute('aria-label', `Conta de ${name}`);
+      $('menu-admin').hidden = profile?.is_admin !== true;
     } else {
       closeMenu();
     }
@@ -206,7 +207,7 @@
     if (!client || !session) { profile = null; return null; }
     const { data, error } = await client
       .from('profiles')
-      .select('full_name, created_at')
+      .select('full_name, created_at, is_admin')
       .eq('id', session.user.id)
       .maybeSingle();
     if (error) {

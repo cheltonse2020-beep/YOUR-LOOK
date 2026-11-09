@@ -316,7 +316,11 @@ function luminance(hex) {
 // Estilos que reutilizam a forma de outro e acrescentam gola + botões
 const TOP_BASE = { shirt: 'sweater', camp: 'tee' };
 
+const escAttr = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+
 function figure(look) {
+  // Looks criados no painel: fotografia do modelo com fundo transparente
+  if (look.image) return `<img class="model-img" src="${escAttr(look.image)}" alt="" draggable="false">`;
   const { body } = look;
   const [top, pants, shoes] = look.pieces;
   const buttoned = top.style in TOP_BASE;
@@ -383,12 +387,17 @@ function icon(piece) {
   const key = piece.kind === 'top' ? piece.style
     : piece.kind === 'pants' ? (isShorts(piece) ? 'shorts' : 'pants')
     : piece.style === 'sandal' ? 'sandal' : 'shoes';
-  const d = paths[key];
+  const d = paths[key] || paths[piece.kind === 'top' ? 'tee' : piece.kind] || paths.tee;
   return `<svg viewBox="0 0 60 70" aria-hidden="true">
-    <path d="${d}" fill="${piece.color}" stroke="#000" stroke-opacity=".12"/>
+    <path d="${d}" fill="${piece.color || '#9aa0a6'}" stroke="#000" stroke-opacity=".12"/>
     <path d="${d}" fill="url(#shade)"/>
   </svg>`;
 }
+
+// Miniatura da peça: fotografia (painel) ou ícone desenhado
+const pieceThumb = piece => (piece.image
+  ? `<img src="${escAttr(piece.image)}" alt="" loading="lazy">`
+  : icon(piece));
 
 /* Posição dos pontos (em % da figura) */
 const PIN_POSITIONS = { top: [50, 30], pants: [60, 70], shoes: [63, 94] };
@@ -412,6 +421,9 @@ let active = 0;      // posição em `view`
 let activePiece = null;
 const currentId = () => view[active];
 const currentLook = () => LOOKS[view[active]];
+// Looks do painel são guardados no cesto pelo id (estável); os da coleção pelo índice.
+const bagLook = x => (x.lookId ? LOOKS.find(l => l.dbId === x.lookId) : LOOKS[x.look]);
+const lookRef = () => (currentLook().dbId ? { lookId: currentLook().dbId } : { look: currentId() });
 let bag = loadBag();
 
 function loadBag() {
@@ -419,6 +431,8 @@ function loadBag() {
     const stored = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
     if (!Array.isArray(stored)) return [];
     return stored.filter(x => {
+      // Look do painel: validado quando o catálogo do Supabase carregar
+      if (typeof x.lookId === 'string') return /^[0-9a-f-]{36}$/i.test(x.lookId) && typeof x.size === 'string';
       if (!Number.isInteger(x.look) || !LOOKS[x.look]) return false;
       if (x.type === 'piece') {
         const piece = LOOKS[x.look].pieces[x.piece];
@@ -593,9 +607,12 @@ function renderPanel() {
   $('look-title').textContent = look.name;
   $('look-mood').textContent = look.mood;
   $('look-number').textContent = pad(active + 1);
+  // Só pede o tamanho/número que o conjunto precisa
+  $('size').closest('label').hidden = !look.pieces.some(p => p.kind !== 'shoes');
+  $('shoe').closest('label').hidden = !look.pieces.some(p => p.kind === 'shoes');
   $('products').innerHTML = look.pieces.map((p, i) => `
     <button type="button" class="product" data-piece="${i}">
-      <span class="swatch">${icon(p)}</span>
+      <span class="swatch">${pieceThumb(p)}</span>
       <span><span class="pname">${p.name}</span><span class="pdetail">${p.detail}</span></span>
       <strong>${money(p.price)}</strong>
     </button>`).join('');
@@ -623,7 +640,9 @@ function renderPiece(index) {
   const preset = piece.kind === 'shoes' ? $('shoe').value : $('size').value;
 
   $('piece').dataset.piece = index;
-  $('piece-zoom').innerHTML = figure(look).replace('viewBox="0 0 240 600"', `viewBox="${cropFor(piece)}"`);
+  $('piece-zoom').innerHTML = look.image
+    ? `<img src="${escAttr(piece.image || look.image)}" alt="">`
+    : figure(look).replace('viewBox="0 0 240 600"', `viewBox="${cropFor(piece)}"`);
   $('piece-zoom').classList.remove('enter');
   void $('piece-zoom').offsetWidth;
   $('piece-zoom').classList.add('enter');
@@ -638,7 +657,7 @@ function renderPiece(index) {
   $('piece-status').textContent = '';
   $('piece-others').innerHTML = look.pieces.map((p, i) => `
     <button type="button" class="piece-thumb${i === index ? ' active' : ''}" data-goto="${i}"
-      aria-label="Ver ${p.name}" aria-current="${i === index}">${icon(p)}</button>`).join('');
+      aria-label="Ver ${p.name}" aria-current="${i === index}">${pieceThumb(p)}</button>`).join('');
   $('piece-full').textContent = `Comprar o conjunto completo · ${money(lookTotal(look))}`;
 }
 
@@ -651,13 +670,16 @@ function addPieceToBag() {
     $('piece-status').className = 'piece-status warn';
     return;
   }
-  bag.push({ type: 'piece', look: currentId(), piece: index, size: chosen.dataset.size });
+  bag.push({ type: 'piece', ...lookRef(), piece: index, size: chosen.dataset.size });
   saveBag();
   $('piece-status').textContent = `✓ ${piece.name} (${chosen.dataset.size}) adicionada ao cesto.`;
   $('piece-status').className = 'piece-status ok';
 }
 
+let interacted = false;   // o cliente já mudou de look? (ver applyRemote)
+
 function go(index) {
+  interacted = true;
   const n = view.length;
   const next = ((index % n) + n) % n;
   // Caminho mais curto à volta da órbita (ex.: 5 → 1 avança uma posição).
@@ -676,28 +698,30 @@ function go(index) {
 
 /* ---------- Categorias ---------- */
 function renderTabs() {
-  $('categories').innerHTML = CATEGORIES.map(c => {
+  $('categories').innerHTML = CATEGORIES.filter(c => !c.hidden).map(c => {
     const count = c.id === 'all' ? LOOKS.length : LOOKS.filter(l => l.cats.includes(c.id)).length;
     return `<button type="button" class="cat" data-cat="${c.id}" aria-pressed="false">${c.label}<span>${count}</span></button>`;
   }).join('');
 }
 
 function setCategory(id, { animate = true } = {}) {
-  if (!CATEGORIES.some(c => c.id === id)) id = 'all';
+  if (!CATEGORIES.some(c => c.id === id && !c.hidden)) id = 'all';
   const cat = CATEGORIES.find(c => c.id === id);
   category = id;
-  view = LOOKS.map((_, i) => i).filter(i => LOOKS[i].cats.includes(id));
+  // Ordem: looks do painel pela posição definida; depois a coleção original
+  const order = i => LOOKS[i].order ?? 1000 + i;
+  view = LOOKS.map((_, i) => i).filter(i => LOOKS[i].cats.includes(id)).sort((a, b) => order(a) - order(b));
 
   setFocus(false, false);
   if ($('piece').open) $('piece').close();
   anim = null;
-  active = id === 'all' ? Math.min(2, view.length - 1) : 0;
+  active = id === 'all' && !LOOKS[view[0]]?.dbId ? Math.min(2, view.length - 1) : 0;
   activePiece = null;
 
   buildModels();
   markSelected();
   renderPanel();
-  $('intro-text').innerHTML = `${view.length} ${cat.blurb}<br>Toca no modelo para o ampliar.`;
+  $('intro-text').innerHTML = `${view.length} ${escAttr(cat.blurb || 'conjuntos.')}<br>Toca no modelo para o ampliar.`;
   document.querySelectorAll('.cat').forEach(b => {
     const on = b.dataset.cat === id;
     b.classList.toggle('active', on);
@@ -730,6 +754,63 @@ function init() {
   setCategory(location.hash.slice(1), { animate: false });
 }
 
+/* ---------- Catálogo do Supabase (catalog.js) ----------
+   Junta as categorias e os looks publicados no painel ao carrossel existente. */
+function applyRemote({ categories = [], looks = [], preview = null } = {}) {
+  const tabsBefore = JSON.stringify(CATEGORIES.map(c => [c.id, c.label, c.hidden]));
+  categories.forEach(c => {
+    let cat = CATEGORIES.find(x => x.id === c.id);
+    if (!cat) { cat = { id: c.id }; CATEGORIES.push(cat); }
+    cat.label = c.name;
+    cat.hidden = !c.visible;
+    cat.position = c.position;
+    if (c.description) cat.blurb = c.description;
+    else if (!cat.blurb) cat.blurb = `conjuntos ${c.name}.`;
+  });
+  CATEGORIES.sort((a, b) => (a.id === 'all' ? -1 : b.id === 'all' ? 1 : (a.position ?? 999) - (b.position ?? 999)));
+
+  const keep = currentLook();
+  for (let i = LOOKS.length - 1; i >= 0; i--) if (LOOKS[i].dbId) LOOKS.splice(i, 1);
+  looks.forEach(l => LOOKS.push({
+    name: l.name,
+    mood: l.description || 'Look da coleção.',
+    cats: ['all', l.category_id],
+    image: l.image,
+    order: l.preview ? -1 : l.position,
+    dbId: l.id,
+    preview: Boolean(l.preview),
+    pieces: l.pieces.map(withDetail),
+  }));
+
+  // Cesto: retira looks que deixaram de estar publicados
+  const before = bag.length;
+  bag = bag.filter(x => {
+    const look = bagLook(x);
+    if (!look) return !x.lookId;
+    return x.type !== 'piece' || Boolean(look.pieces[x.piece]);
+  });
+  if (bag.length !== before) saveBag(); else updateBag();
+
+  const tabsChanged = JSON.stringify(CATEGORIES.map(c => [c.id, c.label, c.hidden])) !== tabsBefore;
+  if (!looks.length && !tabsChanged) return;
+  renderTabs();
+  setCategory(preview ? 'all' : category, { animate: false });
+  // Só mantém o look atual se o cliente já tiver navegado; no primeiro carregamento mostra os looks novos à frente
+  const idx = keep && !preview && interacted ? view.findIndex(i => LOOKS[i] === keep) : -1;
+  if (idx > 0) {
+    active = idx;
+    rotation = targetRotation = idx;
+    markSelected(); placeModels(); renderPanel(); renderPins();
+  }
+  const banner = $('preview-banner');
+  if (banner) {
+    banner.hidden = !preview;
+    if (preview) banner.textContent = `Pré-visualização: «${preview}» ainda não está publicado. Só administradores o veem.`;
+  }
+}
+
+window.FORMA_STORE = { applyRemote };
+
 /* =========================================================
    Saco
    ========================================================= */
@@ -757,35 +838,38 @@ function updateBag() {
     void count.offsetWidth;
     count.classList.add('bump');
   }
-  count.textContent = bag.length;
+  const shown = bag.filter(x => bagLook(x));   // looks do painel ainda a carregar ficam guardados
+  count.textContent = shown.length;
   count.dataset.ready = '1';
-  count.toggleAttribute('data-empty', bag.length === 0);
-  $('bag').setAttribute('aria-label', `Abrir cesto (${bag.length} ${bag.length === 1 ? 'artigo' : 'artigos'})`);
-  $('cart-items').innerHTML = bag.length
+  count.toggleAttribute('data-empty', shown.length === 0);
+  $('bag').setAttribute('aria-label', `Abrir cesto (${shown.length} ${shown.length === 1 ? 'artigo' : 'artigos'})`);
+  $('cart-items').innerHTML = shown.length
     ? bag.map((x, i) => {
-      const look = LOOKS[x.look];
+      const look = bagLook(x);
+      if (!look) return '';
       if (x.type === 'piece') {
         const piece = look.pieces[x.piece];
         const sizeLabel = piece.kind === 'shoes' ? 'Número' : 'Tamanho';
         return `<div class="cart-row">
-          <span class="cart-thumb">${icon(piece)}</span>
+          <span class="cart-thumb">${pieceThumb(piece)}</span>
           <span class="cart-info">${piece.name}<br><small>${piece.detail} · ${sizeLabel} ${x.size} · ${money(piece.price)}</small></span>
           <button type="button" data-remove="${i}">Remover</button>
         </div>`;
       }
+      const sizes = [x.size && `Roupa ${x.size}`, x.shoe && `Calçado ${x.shoe}`].filter(Boolean).join(' · ');
       return `<div class="cart-row">
-        <span class="cart-thumb">${icon(look.pieces[0])}</span>
-        <span class="cart-info">Conjunto ${look.name}<br><small>Roupa ${x.size} · Calçado ${x.shoe} · ${money(lookTotal(look))}</small></span>
+        <span class="cart-thumb">${pieceThumb(look.pieces[0])}</span>
+        <span class="cart-info">Conjunto ${look.name}<br><small>${sizes} · ${money(lookTotal(look))}</small></span>
         <button type="button" data-remove="${i}">Remover</button>
       </div>`;
     }).join('')
     : '<p class="muted">O teu cesto está vazio.</p>';
-  const total = bag.reduce((sum, x) =>
-    sum + (x.type === 'piece' ? LOOKS[x.look].pieces[x.piece].price : lookTotal(LOOKS[x.look])), 0);
+  const total = shown.reduce((sum, x) =>
+    sum + (x.type === 'piece' ? bagLook(x).pieces[x.piece].price : lookTotal(bagLook(x))), 0);
   $('cart-total').textContent = money(total);
-  $('cart-total-row').hidden = !bag.length;
-  $('clear').hidden = !bag.length;
-  if ($('checkout-start')) $('checkout-start').hidden = !bag.length;
+  $('cart-total-row').hidden = !shown.length;
+  $('clear').hidden = !shown.length;
+  if ($('checkout-start')) $('checkout-start').hidden = !shown.length;
 }
 
 /* =========================================================
@@ -861,6 +945,7 @@ let swiped = false;  // impede o clique que o navegador dispara no fim de um arr
 const pxPerStep = () => Math.max(70, $('models').clientWidth * DRAG.stepRatio);
 
 function setActiveFromRotation(rot) {
+  interacted = true;   // arrastar também conta como navegação
   const n = view.length;
   const index = ((Math.round(rot) % n) + n) % n;
   if (index !== active) {
@@ -939,9 +1024,12 @@ $('models').addEventListener('wheel', e => {
 }, { passive: false });
 
 $('add').addEventListener('click', () => {
-  if (!$('size').value) { message('Escolhe primeiro o tamanho da roupa.'); $('size').focus(); return; }
-  if (!$('shoe').value) { message('Escolhe o número do calçado.'); $('shoe').focus(); return; }
-  bag.push({ look: currentId(), size: $('size').value, shoe: $('shoe').value });
+  const look = currentLook();
+  const needsSize = look.pieces.some(p => p.kind !== 'shoes');
+  const needsShoe = look.pieces.some(p => p.kind === 'shoes');
+  if (needsSize && !$('size').value) { message('Escolhe primeiro o tamanho da roupa.'); $('size').focus(); return; }
+  if (needsShoe && !$('shoe').value) { message('Escolhe o número do calçado.'); $('shoe').focus(); return; }
+  bag.push({ ...lookRef(), size: needsSize ? $('size').value : '', shoe: needsShoe ? $('shoe').value : '' });
   saveBag();
   message(`${currentLook().name} adicionado ao cesto.`);
 });

@@ -76,6 +76,7 @@ async function markPaid(session: any): Promise<string> {
     headers: { ...headers, Prefer: 'return=minimal' },
     body: JSON.stringify({
       status: 'paid',
+      payment_status: 'paid',   // admin.sql: pagamento separado do envio
       paid_at: new Date().toISOString(),
       stripe_session_id: session.id,
       stripe_payment_intent: typeof session.payment_intent === 'string' ? session.payment_intent : null,
