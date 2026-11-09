@@ -184,9 +184,9 @@
         </label>
       </fieldset>
 
-      <p class="pay-note">Depois de confirmares, segues para o <strong>pagamento seguro da Stripe</strong> (cartão e outros métodos). A encomenda só fica paga quando a Stripe confirmar o pagamento.</p>
+      <p class="pay-note">Ao confirmar, abre-se logo o <strong>pagamento seguro da Stripe</strong> (cartão e outros métodos). A encomenda só fica paga quando a Stripe confirmar o pagamento.</p>
       <p class="form-status" role="alert" aria-live="polite"></p>
-      <button class="primary" type="submit">Confirmar encomenda</button>
+      <button class="primary" type="submit">Confirmar e pagar</button>
     </form>
 
     <div id="checkout-done" class="auth-form auth-notice" data-tone="ok" hidden>
@@ -196,6 +196,19 @@
       <p class="form-status" role="alert" aria-live="polite"></p>
       <button class="primary" type="button" id="checkout-pay">Pagar agora</button>
       <button class="link-inline" type="button" id="checkout-see-orders">Pagar mais tarde — ver as minhas encomendas</button>
+    </div>
+
+    <!-- Pagamento dentro do site (Stripe Embedded Checkout) -->
+    <div id="payment-embed" class="auth-form" hidden>
+      <div class="embed-head">
+        <h2>Pagamento</h2>
+        <span class="muted" id="embed-summary"></span>
+      </div>
+      <p class="form-status" role="alert" aria-live="polite"></p>
+      <div id="stripe-checkout" class="stripe-checkout">
+        <p class="muted embed-loading"><span class="spinner dark" aria-hidden="true"></span> A abrir pagamento seguro…</p>
+      </div>
+      <p class="hint">Pagamento processado pela Stripe. Os dados do cartão não passam pelos servidores da FORMA.</p>
     </div>
 
     <!-- Regresso da Stripe -->

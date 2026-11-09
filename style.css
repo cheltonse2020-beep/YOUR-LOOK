@@ -660,6 +660,11 @@ dialog h2 { margin: 0; color: var(--ink); }
 .order-card li span { margin-left: auto; font-variant-numeric: tabular-nums; }
 .order-foot { display: flex; justify-content: space-between; margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--line); font-size: 13px; }
 .auth-form button[hidden], .auth-form .primary[hidden] { display: none; }
+.checkout-dialog.wide { width: min(640px, 96vw); }
+.embed-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding-right: 36px; }
+.embed-head .muted { margin: 0; }
+.stripe-checkout { min-height: 360px; background: #fff; border: 1px solid var(--line); border-radius: 4px; overflow: hidden; }
+.embed-loading { padding: 24px; margin: 0; }
 .pay-btn { width: 100%; margin-top: 12px; min-height: 44px; }
 .auth-notice[data-tone="info"] .notice-icon { background: #eef2f8; color: #2c3e57; }
 #checkout-done .link-inline, #payment-view .link-inline { align-self: center; }

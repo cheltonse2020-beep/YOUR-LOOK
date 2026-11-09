@@ -14,6 +14,11 @@ window.FORMA_CONFIG = {
   supabaseUrl: 'https://O-TEU-PROJETO.supabase.co',
   supabasePublishableKey: 'sb_publishable_COLOCA_AQUI_A_TUA_CHAVE',
 
+  // Stripe: chave PUBLICÁVEL (pk_test_... / pk_live_...) para abrir o pagamento
+  // numa janela dentro do site. A chave secreta (sk_...) vai só para os Secrets
+  // das Edge Functions do Supabase, nunca para aqui.
+  stripePublishableKey: 'pk_test_COLOCA_AQUI_A_TUA_CHAVE',
+
   // Opcional: URL para onde o Supabase redireciona depois de confirmar o
   // email, entrar com Google ou recuperar a palavra-passe. Por omissão é a
   // página atual (ex.: http://localhost:5500/index.html). Tem de constar em

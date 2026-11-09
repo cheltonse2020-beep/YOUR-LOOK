@@ -116,7 +116,7 @@ Se mudares peças ou preços em `app.js`: `node supabase/generate-products.mjs` 
 Gerir estados (pela loja, no SQL Editor ou no Table Editor): `update public.orders set status = 'paid' where number = 1001;` (estados: `pending_payment`, `paid`, `shipped`, `delivered`, `cancelled`).
 
 ## Pagamento (Stripe)
-Depois de registar a encomenda aparece **Pagar agora**: o site pede à função `create-checkout` uma sessão Stripe Checkout e o cliente vai para a página segura da Stripe. No regresso, o site mostra "Pagamento confirmado" (ou "cancelado", com "Tentar pagar de novo"). Encomendas por pagar têm **Pagar agora** em "As minhas encomendas".
+Ao carregar em **Confirmar e pagar**, a encomenda é registada e abre-se logo uma **janela de pagamento da Stripe dentro do site** (Embedded Checkout; exige `stripePublishableKey: 'pk_test_...'` em `config.js`). Sem essa chave, o cliente é levado para a página da Stripe. Se o pagamento não abrir, a encomenda fica guardada com **Pagar agora**. No regresso, o site mostra "Pagamento confirmado" (ou "cancelado", com "Tentar pagar de novo"). Encomendas por pagar têm **Pagar agora** em "As minhas encomendas".
 
 Segurança:
 - A **chave secreta da Stripe** fica só nos *Secrets* das Edge Functions — nunca no site, no `config.js` nem no GitHub.
@@ -127,6 +127,7 @@ Segurança:
 ### Passos para ativar
 1. **SQL Editor** → executar `supabase/payments.sql`.
 2. **Stripe** (https://dashboard.stripe.com, em **modo de teste**) → *Developers → API keys* → copiar a **Secret key** (`sk_test_...`). Não a coloques no site.
+2b. Copiar também a **Publishable key** (`pk_test_...`) para `stripePublishableKey` em `config.js` (é pública; ativa a janela de pagamento dentro do site).
 3. **Supabase → Edge Functions → Secrets** (https://supabase.com/dashboard/project/_/functions/secrets): criar
    - `STRIPE_SECRET_KEY` = `sk_test_...`
    - `SITE_URL` = `http://localhost:5500/index.html` (em produção, o endereço público)

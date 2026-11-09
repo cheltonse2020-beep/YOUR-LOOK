@@ -2,8 +2,9 @@
 // FORMA — Edge Function: create-checkout
 // Cria uma sessão Stripe Checkout para uma encomenda do próprio cliente.
 //
-// Pedido (do site, com a sessão do cliente):  POST { "order_id": "<uuid>" }
-// Resposta: { "url": "https://checkout.stripe.com/..." }
+// Pedido (do site, com a sessão do cliente):  POST { "order_id": "<uuid>", "embedded": true|false }
+// Resposta: embebido → { "client_secret": "..." } (janela de pagamento dentro do site)
+//           redireção → { "url": "https://checkout.stripe.com/..." }
 //
 // Segurança:
 // - O utilizador é verificado no servidor (Auth /user) a partir do seu token.
@@ -93,7 +94,12 @@ export async function handler(req: Request): Promise<Response> {
 
   // 2. Qual encomenda?
   let orderId = '';
-  try { orderId = String((await req.json())?.order_id ?? ''); } catch { /* corpo inválido */ }
+  let embedded = false;
+  try {
+    const body = await req.json();
+    orderId = String(body?.order_id ?? '');
+    embedded = body?.embedded === true;
+  } catch { /* corpo inválido */ }
   if (!/^[0-9a-f-]{36}$/i.test(orderId)) return json({ error: 'Encomenda inválida.' }, 400, origin);
 
   // 3. Ler a encomenda com o token do cliente (RLS: só as suas)
@@ -109,14 +115,18 @@ export async function handler(req: Request): Promise<Response> {
   }
 
   try {
-    // 4. Se já existe uma sessão aberta para esta encomenda, reutiliza-a
+    // 4. Sessão anterior desta encomenda: reutiliza (redireção) ou expira-a,
+    //    para nunca haver duas sessões abertas que pudessem cobrar duas vezes.
     if (order.stripe_session_id) {
       try {
         const existing = await stripe(`checkout/sessions/${encodeURIComponent(order.stripe_session_id)}`, null, 'GET');
-        if (existing.status === 'open' && existing.url && existing.amount_total === cents(order.total)) {
-          return json({ url: existing.url }, 200, origin);
+        if (existing.status === 'open') {
+          if (!embedded && existing.url && existing.amount_total === cents(order.total)) {
+            return json({ url: existing.url }, 200, origin);
+          }
+          await stripe(`checkout/sessions/${encodeURIComponent(existing.id)}/expire`, {});
         }
-      } catch { /* sessão antiga inválida: cria-se outra */ }
+      } catch { /* sessão antiga inválida ou já expirada: cria-se outra */ }
     }
 
     // 5. Criar a sessão com os valores do servidor
@@ -125,7 +135,8 @@ export async function handler(req: Request): Promise<Response> {
       const u = new URL(site);
       u.searchParams.set('payment', status);
       u.searchParams.set('order', String(order.number));
-      return u.toString();
+      // {CHECKOUT_SESSION_ID} é substituído pela Stripe (não pode ser codificado)
+      return `${u.toString()}&session_id={CHECKOUT_SESSION_ID}`;
     };
     const p: Record<string, string> = {
       mode: 'payment',
@@ -135,9 +146,14 @@ export async function handler(req: Request): Promise<Response> {
       'metadata[order_number]': String(order.number),
       'payment_intent_data[metadata][order_id]': order.id,
       'payment_intent_data[description]': `FORMA — encomenda n.º ${order.number}`,
-      success_url: back('success'),
-      cancel_url: back('cancelled'),
     };
+    if (embedded) {
+      p.ui_mode = 'embedded';
+      p.return_url = back('success');
+    } else {
+      p.success_url = back('success');
+      p.cancel_url = back('cancelled');
+    }
     if (user.email) p.customer_email = user.email;
 
     const lines = [...order.order_items.map((i: any) => ({
@@ -166,7 +182,7 @@ export async function handler(req: Request): Promise<Response> {
       body: JSON.stringify({ stripe_session_id: session.id }),
     });
 
-    return json({ url: session.url }, 200, origin);
+    return json(embedded ? { client_secret: session.client_secret } : { url: session.url }, 200, origin);
   } catch (err) {
     console.error('Erro ao criar a sessão Stripe:', err);
     return json({ error: 'Não foi possível abrir o pagamento. Tenta de novo dentro de momentos.' }, 502, origin);

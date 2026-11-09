@@ -48,7 +48,9 @@
 
   /* ---------- Vistas ---------- */
   function showView(id) {
-    ['checkout-form', 'checkout-done', 'orders-view', 'payment-view'].forEach(v => { $(v).hidden = v !== id; });
+    if (id !== 'payment-embed') destroyEmbedded();
+    ['checkout-form', 'checkout-done', 'orders-view', 'payment-view', 'payment-embed'].forEach(v => { $(v).hidden = v !== id; });
+    dialog.classList.toggle('wide', id === 'payment-embed');
     dialog.querySelectorAll('.form-status').forEach(el => { el.textContent = ''; delete el.dataset.tone; });
     if (!dialog.open) dialog.showModal();
   }
@@ -160,7 +162,8 @@
         `A tua encomenda n.º ${data.number} foi registada, no total de ${money(Number(data.total))}` +
         `${Number(data.shipping_cost) === 0 ? ' (portes grátis)' : ''}. Falta só o pagamento.`;
       $('checkout-pay').textContent = `Pagar agora · ${money(Number(data.total))}`;
-      showView('checkout-done');
+      showView('checkout-done');   // fica por baixo, caso o pagamento não abra
+      pay(data.id, $('checkout-pay'), $('checkout-done'), { number: data.number, total: data.total });
     } catch (err) {
       setStatus(form, a.errorText(err));
     } finally {
@@ -188,21 +191,68 @@
       const body = await error.context?.json?.();
       if (body?.error) return body.error;
     } catch { /* sem corpo */ }
-    if (error.name === 'FunctionsFetchError') return 'Não foi possível contactar o serviço de pagamento. Verifica a ligação ou tenta mais tarde.';
+    if (error.name === 'FunctionsFetchError') {
+      console.warn('[FORMA] create-checkout não respondeu. Confirma que a Edge Function está publicada no Supabase.');
+      return 'O pagamento online ainda não está disponível. A tua encomenda ficou guardada: podes pagá-la mais tarde em "As minhas encomendas".';
+    }
     return 'Não foi possível abrir o pagamento. Tenta de novo dentro de momentos.';
   }
 
-  async function pay(orderId, button, container) {
+  /* Janela de pagamento dentro do site (Stripe Embedded Checkout).
+     Precisa da chave publicável da Stripe (pk_...) em config.js; sem ela, usa a página da Stripe. */
+  let embedded = null;
+  const stripeKey = () => String((window.FORMA_CONFIG || {}).stripePublishableKey || '');
+  const canEmbed = () => /^pk_(test|live)_/.test(stripeKey());
+
+  function loadStripe() {
+    if (window.Stripe) return Promise.resolve(window.Stripe);
+    return new Promise((resolve, reject) => {
+      const s = document.createElement('script');
+      s.src = 'https://js.stripe.com/v3/';
+      s.onload = () => (window.Stripe ? resolve(window.Stripe) : reject(new Error('Stripe.js')));
+      s.onerror = () => reject(new Error('Stripe.js'));
+      document.head.append(s);
+    });
+  }
+
+  function destroyEmbedded() {
+    if (embedded) { try { embedded.destroy(); } catch { /* já destruído */ } embedded = null; }
+  }
+
+  async function openEmbedded(clientSecret, info) {
+    showView('payment-embed');
+    $('embed-summary').textContent = info ? `Encomenda n.º ${info.number} · ${money(Number(info.total))}` : '';
+    $('stripe-checkout').innerHTML = '<p class="muted embed-loading"><span class="spinner dark" aria-hidden="true"></span> A abrir pagamento seguro…</p>';
+    const StripeJs = await loadStripe();
+    const stripe = StripeJs(stripeKey());
+    destroyEmbedded();
+    embedded = await stripe.initEmbeddedCheckout({ fetchClientSecret: async () => clientSecret });
+    $('stripe-checkout').innerHTML = '';
+    embedded.mount('#stripe-checkout');
+  }
+
+  async function pay(orderId, button, container, info = null) {
     const a = auth();
     if (!a?.session) { dialog.close(); a?.openLogin('Entra para pagar a tua encomenda.'); return; }
     container.querySelector('.form-status').textContent = '';
     const original = button.innerHTML;
     button.disabled = true;
     button.innerHTML = '<span class="spinner" aria-hidden="true"></span>A abrir pagamento seguro…';
+    const useEmbed = canEmbed();
     try {
-      const { data, error } = await a.client.functions.invoke('create-checkout', { body: { order_id: orderId } });
-      if (error || !data?.url) {
+      const { data, error } = await a.client.functions.invoke('create-checkout', { body: { order_id: orderId, embedded: useEmbed } });
+      if (error || !(useEmbed ? data?.client_secret : data?.url)) {
         setStatus(container, error ? await functionError(error) : 'Não foi possível abrir o pagamento.');
+        return;
+      }
+      if (useEmbed) {
+        try {
+          await openEmbedded(data.client_secret, info);
+        } catch (err) {
+          console.error('[FORMA] Falha ao abrir o pagamento embebido:', err);
+          showView(container.id);
+          setStatus(container, 'Não foi possível carregar a janela de pagamento. Verifica a ligação e tenta de novo.');
+        }
         return;
       }
       window.location.assign(data.url);   // página segura da Stripe
@@ -302,7 +352,7 @@
         <p class="muted">${new Date(o.created_at).toLocaleDateString('pt-PT', { day: 'numeric', month: 'long', year: 'numeric' })}</p>
         <ul>${o.order_items.map(i => `<li>${i.qty} × ${escapeHtml(i.name)} <small>${escapeHtml(i.color_name)} · ${escapeHtml(i.size)}</small><span>${money(i.unit_price * i.qty)}</span></li>`).join('')}</ul>
         <div class="order-foot"><span>Total${Number(o.shipping_cost) === 0 ? ' (portes grátis)' : ''}</span><strong>${money(Number(o.total))}</strong></div>
-        ${o.status === 'pending_payment' ? `<button type="button" class="primary pay-btn" data-pay="${escapeHtml(o.id)}">Pagar agora · ${money(Number(o.total))}</button>` : ''}
+        ${o.status === 'pending_payment' ? `<button type="button" class="primary pay-btn" data-pay="${escapeHtml(o.id)}" data-number="${o.number}" data-total="${Number(o.total)}">Pagar agora · ${money(Number(o.total))}</button>` : ''}
       </article>`).join('');
   }
 
@@ -311,12 +361,13 @@
   $('checkout-form').addEventListener('submit', submit);
   $('checkout-close').addEventListener('click', () => dialog.close());
   dialog.addEventListener('click', e => { if (e.target === dialog) dialog.close(); });
+  dialog.addEventListener('close', destroyEmbedded);
   $('checkout-see-orders').addEventListener('click', openOrders);
   $('payment-orders').addEventListener('click', openOrders);
   $('checkout-pay').addEventListener('click', e => lastOrderId && pay(lastOrderId, e.currentTarget, $('checkout-done')));
   $('orders-list').addEventListener('click', e => {
     const btn = e.target.closest('[data-pay]');
-    if (btn) pay(btn.dataset.pay, btn, $('orders-view'));
+    if (btn) pay(btn.dataset.pay, btn, $('orders-view'), { number: btn.dataset.number, total: btn.dataset.total });
   });
   $('menu-orders').addEventListener('click', openOrders);
 
