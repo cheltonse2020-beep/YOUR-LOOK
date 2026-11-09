@@ -659,6 +659,10 @@ dialog h2 { margin: 0; color: var(--ink); }
 .order-card li small { color: var(--muted); font-size: 11px; }
 .order-card li span { margin-left: auto; font-variant-numeric: tabular-nums; }
 .order-foot { display: flex; justify-content: space-between; margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--line); font-size: 13px; }
+.auth-form button[hidden], .auth-form .primary[hidden] { display: none; }
+.pay-btn { width: 100%; margin-top: 12px; min-height: 44px; }
+.auth-notice[data-tone="info"] .notice-icon { background: #eef2f8; color: #2c3e57; }
+#checkout-done .link-inline, #payment-view .link-inline { align-self: center; }
 .order-status { font-size: 11px; padding: 4px 10px; border-radius: 999px; background: #fbf3e4; color: #8a5a12; white-space: nowrap; }
 .order-status[data-status="paid"], .order-status[data-status="delivered"] { background: #eef6ef; color: #2f6b3a; }
 .order-status[data-status="shipped"] { background: #eef2f8; color: #2c3e57; }

@@ -22,6 +22,10 @@ Não precisa de npm nem de compilação.
 - `supabase/orders.sql` — catálogo de preços, encomendas, linhas, RLS e função `place_order`.
 - `supabase/products.sql` — preços oficiais (gerado por `supabase/generate-products.mjs` a partir de `app.js`).
 - `supabase/test-orders.sql` — teste das encomendas (preços no servidor, validação, isolamento; faz rollback).
+- `supabase/payments.sql` — campos de pagamento Stripe nas encomendas.
+- `supabase/functions/create-checkout` — Edge Function que cria o pagamento Stripe de uma encomenda do cliente.
+- `supabase/functions/stripe-webhook` — Edge Function que recebe a confirmação da Stripe e marca a encomenda como paga.
+- `supabase/config.toml` — configuração das funções (sem verificação de JWT no gateway; ver abaixo).
 
 ## Editar os looks
 Os 30 looks da coleção principal estão em `LOOK_TABLE` (`app.js`), uma linha por look:
@@ -111,5 +115,32 @@ Se mudares peças ou preços em `app.js`: `node supabase/generate-products.mjs` 
 
 Gerir estados (pela loja, no SQL Editor ou no Table Editor): `update public.orders set status = 'paid' where number = 1001;` (estados: `pending_payment`, `paid`, `shipped`, `delivered`, `cancelled`).
 
+## Pagamento (Stripe)
+Depois de registar a encomenda aparece **Pagar agora**: o site pede à função `create-checkout` uma sessão Stripe Checkout e o cliente vai para a página segura da Stripe. No regresso, o site mostra "Pagamento confirmado" (ou "cancelado", com "Tentar pagar de novo"). Encomendas por pagar têm **Pagar agora** em "As minhas encomendas".
+
+Segurança:
+- A **chave secreta da Stripe** fica só nos *Secrets* das Edge Functions — nunca no site, no `config.js` nem no GitHub.
+- `create-checkout` verifica o utilizador, lê a encomenda **com o token do cliente** (RLS: só as suas) e usa os preços gravados na base de dados. O browser só envia o id da encomenda. Os URLs de regresso são fixos (`SITE_URL`).
+- Uma encomenda só passa a **paga** pelo `stripe-webhook`, que verifica a assinatura da Stripe (`Stripe-Signature`) e confirma que o valor e a moeda coincidem com o total. Voltar ao site com `?payment=success` não marca nada como pago.
+- Multibanco (se o ativares na Stripe): a encomenda fica a aguardar até a referência ser paga (`checkout.session.async_payment_succeeded`).
+
+### Passos para ativar
+1. **SQL Editor** → executar `supabase/payments.sql`.
+2. **Stripe** (https://dashboard.stripe.com, em **modo de teste**) → *Developers → API keys* → copiar a **Secret key** (`sk_test_...`). Não a coloques no site.
+3. **Supabase → Edge Functions → Secrets** (https://supabase.com/dashboard/project/_/functions/secrets): criar
+   - `STRIPE_SECRET_KEY` = `sk_test_...`
+   - `SITE_URL` = `http://localhost:5500/index.html` (em produção, o endereço público)
+4. **Publicar as funções**:
+   - Pelo painel: *Edge Functions → Deploy a new function → Via Editor*, nome `create-checkout`, colar `supabase/functions/create-checkout/index.ts`, e **desligar "Enforce JWT verification"**; repetir para `stripe-webhook`.
+   - Ou pelo CLI: `npx supabase login`, `npx supabase link --project-ref <ref>`, `npx supabase functions deploy create-checkout stripe-webhook` (o `config.toml` já desliga a verificação de JWT).
+   - Porquê sem JWT no gateway: a Stripe não envia JWT (o webhook é autenticado pela assinatura) e `create-checkout` verifica o utilizador dentro da função.
+5. **Stripe → Developers → Webhooks → Add endpoint**:
+   - URL: `https://<ref>.supabase.co/functions/v1/stripe-webhook`
+   - Eventos: `checkout.session.completed`, `checkout.session.async_payment_succeeded`, `checkout.session.async_payment_failed`
+   - Copiar o *Signing secret* (`whsec_...`) para o Secret `STRIPE_WEBHOOK_SECRET` no Supabase.
+6. Testar com o cartão de teste `4242 4242 4242 4242`, qualquer data futura e qualquer CVC. A encomenda deve passar a **Paga** em "As minhas encomendas".
+
+Para produção: trocar para as chaves `sk_live_...`, criar o webhook em modo live com o novo `whsec_...` e atualizar `SITE_URL`.
+
 ## Limitações
-O cesto usa `localStorage` (não está ligado à conta). Não há pagamento online nem gestão de stock: as encomendas ficam a aguardar pagamento. Os preços e a marca são exemplos.
+O cesto usa `localStorage` (não está ligado à conta). Não há gestão de stock nem reembolsos automáticos (fazem-se no painel da Stripe; o estado da encomenda muda-se no Supabase). Os preços e a marca são exemplos.

@@ -184,7 +184,7 @@
         </label>
       </fieldset>
 
-      <p class="pay-note">O pagamento online ainda não está disponível: a encomenda fica registada como <strong>a aguardar pagamento</strong> e entramos em contacto para concluir.</p>
+      <p class="pay-note">Depois de confirmares, segues para o <strong>pagamento seguro da Stripe</strong> (cartão e outros métodos). A encomenda só fica paga quando a Stripe confirmar o pagamento.</p>
       <p class="form-status" role="alert" aria-live="polite"></p>
       <button class="primary" type="submit">Confirmar encomenda</button>
     </form>
@@ -193,7 +193,19 @@
       <span class="notice-icon" aria-hidden="true"></span>
       <h2>Encomenda registada</h2>
       <p id="checkout-done-text"></p>
-      <button class="primary" type="button" id="checkout-see-orders">Ver as minhas encomendas</button>
+      <p class="form-status" role="alert" aria-live="polite"></p>
+      <button class="primary" type="button" id="checkout-pay">Pagar agora</button>
+      <button class="link-inline" type="button" id="checkout-see-orders">Pagar mais tarde — ver as minhas encomendas</button>
+    </div>
+
+    <!-- Regresso da Stripe -->
+    <div id="payment-view" class="auth-form auth-notice" hidden>
+      <span class="notice-icon" aria-hidden="true"></span>
+      <h2 id="payment-title"></h2>
+      <p id="payment-text"></p>
+      <p class="form-status" role="alert" aria-live="polite"></p>
+      <button class="primary" type="button" id="payment-action" hidden></button>
+      <button class="link-inline" type="button" id="payment-orders">Ver as minhas encomendas</button>
     </div>
 
     <div id="orders-view" class="auth-form" hidden>

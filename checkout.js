@@ -48,7 +48,7 @@
 
   /* ---------- Vistas ---------- */
   function showView(id) {
-    ['checkout-form', 'checkout-done', 'orders-view'].forEach(v => { $(v).hidden = v !== id; });
+    ['checkout-form', 'checkout-done', 'orders-view', 'payment-view'].forEach(v => { $(v).hidden = v !== id; });
     dialog.querySelectorAll('.form-status').forEach(el => { el.textContent = ''; delete el.dataset.tone; });
     if (!dialog.open) dialog.showModal();
   }
@@ -155,10 +155,11 @@
       bag = [];
       saveBag();
       form.elements.notes.value = '';
+      lastOrderId = data.id;
       $('checkout-done-text').textContent =
         `A tua encomenda n.º ${data.number} foi registada, no total de ${money(Number(data.total))}` +
-        `${Number(data.shipping_cost) === 0 ? ' (portes grátis)' : ''}. ` +
-        'Está a aguardar pagamento: entramos em contacto para concluir. Podes acompanhá-la em "As minhas encomendas".';
+        `${Number(data.shipping_cost) === 0 ? ' (portes grátis)' : ''}. Falta só o pagamento.`;
+      $('checkout-pay').textContent = `Pagar agora · ${money(Number(data.total))}`;
       showView('checkout-done');
     } catch (err) {
       setStatus(form, a.errorText(err));
@@ -177,6 +178,93 @@
     return auth()?.errorText(error) || 'Não foi possível registar a encomenda. Tenta de novo.';
   }
 
+  /* ---------- Pagamento (Stripe Checkout via Edge Function create-checkout) ---------- */
+  let lastOrderId = null;
+
+  async function functionError(error) {
+    // FunctionsHttpError traz a resposta da função; as nossas mensagens vêm em { error }
+    try {
+      if (error.context?.status === 404) return 'O pagamento online ainda não está configurado no servidor.';
+      const body = await error.context?.json?.();
+      if (body?.error) return body.error;
+    } catch { /* sem corpo */ }
+    if (error.name === 'FunctionsFetchError') return 'Não foi possível contactar o serviço de pagamento. Verifica a ligação ou tenta mais tarde.';
+    return 'Não foi possível abrir o pagamento. Tenta de novo dentro de momentos.';
+  }
+
+  async function pay(orderId, button, container) {
+    const a = auth();
+    if (!a?.session) { dialog.close(); a?.openLogin('Entra para pagar a tua encomenda.'); return; }
+    container.querySelector('.form-status').textContent = '';
+    const original = button.innerHTML;
+    button.disabled = true;
+    button.innerHTML = '<span class="spinner" aria-hidden="true"></span>A abrir pagamento seguro…';
+    try {
+      const { data, error } = await a.client.functions.invoke('create-checkout', { body: { order_id: orderId } });
+      if (error || !data?.url) {
+        setStatus(container, error ? await functionError(error) : 'Não foi possível abrir o pagamento.');
+        return;
+      }
+      window.location.assign(data.url);   // página segura da Stripe
+    } catch (err) {
+      setStatus(container, a.errorText(err));
+    } finally {
+      button.disabled = false;
+      button.innerHTML = original;
+    }
+  }
+
+  // Regresso da Stripe: ?payment=success|cancelled&order=<número>
+  const returnParams = (() => {
+    const url = new URL(window.location.href);
+    const status = url.searchParams.get('payment');
+    const number = url.searchParams.get('order');
+    if (!status) return null;
+    ['payment', 'order', 'session_id'].forEach(k => url.searchParams.delete(k));
+    history.replaceState(null, '', url.pathname + url.search + url.hash);
+    return /^(success|cancelled)$/.test(status) && /^\d{1,10}$/.test(number || '') ? { status, number: Number(number) } : null;
+  })();
+
+  function paymentView(title, text, tone, action) {
+    $('payment-title').textContent = title;
+    $('payment-text').textContent = text;
+    $('payment-view').dataset.tone = tone;
+    const btn = $('payment-action');
+    btn.hidden = !action;
+    if (action) { btn.textContent = action.label; btn.onclick = action.run; }
+    showView('payment-view');
+  }
+
+  async function fetchOrder(number) {
+    const { data } = await auth().client.from('orders').select('id, number, status, total').eq('number', number).maybeSingle();
+    return data;   // null se não existir ou não for deste cliente (RLS)
+  }
+
+  async function showPaymentResult({ status, number }) {
+    if (status === 'cancelled') {
+      const order = await fetchOrder(number);
+      paymentView('Pagamento cancelado',
+        `Não foi cobrado nada. A encomenda n.º ${number} continua a aguardar pagamento.`, 'info',
+        order?.status === 'pending_payment'
+          ? { label: `Tentar pagar de novo · ${money(Number(order.total))}`, run: () => pay(order.id, $('payment-action'), $('payment-view')) }
+          : null);
+      return;
+    }
+    paymentView('A confirmar o pagamento…', `A aguardar a confirmação da Stripe para a encomenda n.º ${number}.`, 'info', null);
+    $('payment-title').insertAdjacentHTML('afterbegin', '<span class="spinner dark" aria-hidden="true"></span> ');
+    for (let i = 0; i < 10; i++) {
+      const order = await fetchOrder(number);
+      if (order?.status === 'paid') {
+        paymentView('Pagamento confirmado', `Obrigado! A encomenda n.º ${number} está paga (${money(Number(order.total))}). Vamos prepará-la para envio.`, 'ok', null);
+        return;
+      }
+      await new Promise(res => setTimeout(res, 2000));
+    }
+    paymentView('Pagamento em processamento',
+      `A Stripe ainda está a confirmar o pagamento da encomenda n.º ${number}. Pode demorar alguns minutos; ` +
+      'se escolheste Multibanco, fica concluída quando pagares a referência. Acompanha o estado em "As minhas encomendas".', 'info', null);
+  }
+
   /* ---------- As minhas encomendas ---------- */
   async function openOrders() {
     const dropdown = $('user-dropdown');
@@ -190,7 +278,7 @@
     view.setAttribute('aria-busy', 'true');
     const { data, error } = await a.client
       .from('orders')
-      .select('number, status, total, shipping_cost, created_at, order_items(name, color_name, size, qty, unit_price)')
+      .select('id, number, status, total, shipping_cost, created_at, order_items(name, color_name, size, qty, unit_price)')
       .order('created_at', { ascending: false });
     view.removeAttribute('aria-busy');
 
@@ -214,6 +302,7 @@
         <p class="muted">${new Date(o.created_at).toLocaleDateString('pt-PT', { day: 'numeric', month: 'long', year: 'numeric' })}</p>
         <ul>${o.order_items.map(i => `<li>${i.qty} × ${escapeHtml(i.name)} <small>${escapeHtml(i.color_name)} · ${escapeHtml(i.size)}</small><span>${money(i.unit_price * i.qty)}</span></li>`).join('')}</ul>
         <div class="order-foot"><span>Total${Number(o.shipping_cost) === 0 ? ' (portes grátis)' : ''}</span><strong>${money(Number(o.total))}</strong></div>
+        ${o.status === 'pending_payment' ? `<button type="button" class="primary pay-btn" data-pay="${escapeHtml(o.id)}">Pagar agora · ${money(Number(o.total))}</button>` : ''}
       </article>`).join('');
   }
 
@@ -223,6 +312,12 @@
   $('checkout-close').addEventListener('click', () => dialog.close());
   dialog.addEventListener('click', e => { if (e.target === dialog) dialog.close(); });
   $('checkout-see-orders').addEventListener('click', openOrders);
+  $('payment-orders').addEventListener('click', openOrders);
+  $('checkout-pay').addEventListener('click', e => lastOrderId && pay(lastOrderId, e.currentTarget, $('checkout-done')));
+  $('orders-list').addEventListener('click', e => {
+    const btn = e.target.closest('[data-pay]');
+    if (btn) pay(btn.dataset.pay, btn, $('orders-view'));
+  });
   $('menu-orders').addEventListener('click', openOrders);
 
   // Código postal: 1000001 → 1000-001
@@ -231,11 +326,14 @@
     e.target.value = digits.length > 4 ? `${digits.slice(0, 4)}-${digits.slice(4)}` : digits;
   });
 
+  let pendingReturn = returnParams;   // mostrado assim que a sessão estiver disponível
+
   // Depois de iniciar sessão (também após confirmar email ou entrar com Google), retoma a encomenda.
   document.addEventListener('forma:auth', e => {
     const { event, session } = e.detail;
     if (event === 'SIGNED_OUT' && dialog.open) dialog.close();
     if (!session || !['SIGNED_IN', 'INITIAL_SESSION'].includes(event)) return;
+    if (pendingReturn) { const ret = pendingReturn; pendingReturn = null; setTimeout(() => showPaymentResult(ret), 200); return; }
     let resume = false;
     try { resume = sessionStorage.getItem(RESUME_KEY) === '1'; sessionStorage.removeItem(RESUME_KEY); } catch { /* ignorar */ }
     if (resume && bag.length) setTimeout(openCheckout, 350);

@@ -1,0 +1,11 @@
+# Configuração das Edge Functions para o Supabase CLI
+# (supabase functions deploy create-checkout / stripe-webhook)
+
+# A identidade do cliente é verificada dentro da função (Auth /user),
+# o que funciona tanto com as chaves JWT antigas como com as novas.
+[functions.create-checkout]
+verify_jwt = false
+
+# A Stripe não envia JWT: a autenticidade vem da assinatura Stripe-Signature.
+[functions.stripe-webhook]
+verify_jwt = false
