@@ -315,9 +315,35 @@
     });
   }
 
+  /* Fornecedores ativos no projeto (GET /auth/v1/settings, público com a chave publicável).
+     Evita mandar o utilizador para uma página de erro do Supabase se o Google ainda não estiver ativo. */
+  let providersPromise = null;
+  function enabledProviders() {
+    if (!providersPromise) {
+      providersPromise = fetch(`${cfg.supabaseUrl.replace(/\/$/, '')}/auth/v1/settings`, {
+        headers: { apikey: cfg.supabasePublishableKey },
+      })
+        .then(r => (r.ok ? r.json() : null))
+        .then(s => s?.external || null)
+        .catch(() => null);   // sem resposta: não escondemos nada, o clique trata do erro
+    }
+    return providersPromise;
+  }
+
+  async function applyProviderVisibility() {
+    const external = await enabledProviders();
+    const googleOn = !external || external.google === true;
+    dialog.querySelectorAll('.google-btn, .google-btn + .divider').forEach(el => { el.hidden = !googleOn; });
+  }
+
   async function signInWithGoogle(e) {
     const button = e.currentTarget;
     clearStatus();
+    const external = await enabledProviders();
+    if (external && external.google !== true) {
+      setStatus(button.closest('form'), 'O início de sessão com Google ainda não está disponível. Usa o email e a palavra-passe.');
+      return;
+    }
     await withLoading(button, 'A abrir Google…', async () => {
       const { error } = await client.auth.signInWithOAuth({
         provider: 'google',
@@ -476,6 +502,7 @@
 
     const redirectError = readRedirectError();
     let recovering = false;
+    applyProviderVisibility();
 
     client.auth.onAuthStateChange((event, newSession) => {
       session = newSession;

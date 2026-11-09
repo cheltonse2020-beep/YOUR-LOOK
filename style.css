@@ -577,6 +577,7 @@ dialog h2 { margin: 0; color: var(--ink); }
 .google-btn:disabled { opacity: .6; cursor: progress; }
 
 .divider { display: flex; align-items: center; gap: 12px; color: var(--muted); font-size: 11px; }
+.google-btn[hidden], .divider[hidden] { display: none; }   /* Google desativado no Supabase */
 .divider::before, .divider::after { content: ""; flex: 1; height: 1px; background: var(--line); }
 
 .link-inline { font-size: 12px; text-decoration: underline; color: var(--ink); padding: 2px 0; }
