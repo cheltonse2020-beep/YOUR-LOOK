@@ -1,0 +1,266 @@
+<!doctype html>
+<html lang="pt">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>FORMA — Experimenta o look</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <!-- Definições partilhadas pelas figuras SVG (sombreamento e sombra no chão) -->
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <defs>
+      <linearGradient id="shade" x1="0" x2="1">
+        <stop offset="0" stop-color="#000" stop-opacity=".26"/>
+        <stop offset=".3" stop-color="#fff" stop-opacity=".1"/>
+        <stop offset=".62" stop-color="#000" stop-opacity="0"/>
+        <stop offset="1" stop-color="#000" stop-opacity=".3"/>
+      </linearGradient>
+      <radialGradient id="floor">
+        <stop offset="0" stop-color="#5b646b" stop-opacity=".35"/>
+        <stop offset="1" stop-color="#5b646b" stop-opacity="0"/>
+      </radialGradient>
+    </defs>
+  </svg>
+
+  <header>
+    <a class="brand" href="index.html">FORMA<span>®</span></a>
+    <div class="categories" id="categories" role="group" aria-label="Categorias"></div>
+    <nav>
+      <a href="#studio">Coleção 01</a>
+
+      <!-- Autenticação: "Entrar" sem sessão; nome + menu com sessão -->
+      <button id="auth-open" class="auth-link" type="button">Entrar</button>
+      <div class="user-menu" id="user-menu" hidden>
+        <button id="user-button" type="button" aria-haspopup="menu" aria-expanded="false" aria-controls="user-dropdown">
+          <span class="avatar" id="user-initial" aria-hidden="true"></span>
+          <span class="user-name" id="user-name"></span>
+          <svg class="chevron" viewBox="0 0 12 12" aria-hidden="true"><path d="M3 4.5 6 7.5 9 4.5"/></svg>
+        </button>
+        <div class="user-dropdown" id="user-dropdown" role="menu" hidden>
+          <button type="button" role="menuitem" id="menu-account">A minha conta</button>
+          <button type="button" role="menuitem" id="menu-signout">Terminar sessão</button>
+        </div>
+      </div>
+
+      <button id="bag" type="button" aria-label="Abrir cesto (0 artigos)">
+        <svg class="basket" viewBox="0 0 24 24" aria-hidden="true">
+          <rect x="4" y="8.5" width="16" height="12" rx="1.5"/>
+          <path d="M8.5 8.5V7a3.5 3.5 0 0 1 7 0v1.5"/>
+        </svg>
+        <span id="count">0</span>
+      </button>
+    </nav>
+  </header>
+
+  <main id="studio">
+    <section class="studio">
+      <div class="intro">
+        <h1>Experimenta<br>o look.</h1>
+        <p id="intro-text">Conjuntos, do primeiro ao último pormenor.<br>Toca no modelo para o ampliar.</p>
+      </div>
+
+      <div id="models" aria-label="Selecionar conjunto"></div>
+      <div id="pins"></div>
+
+      <!-- Vista ampliada (aparece ao clicar no modelo da frente) -->
+      <div class="focus-bar">
+        <button id="focus-back" type="button">← Voltar à coleção</button>
+        <span id="focus-title"></span>
+      </div>
+      <button id="focus-close" class="focus-close" type="button" aria-label="Fechar vista ampliada">✕</button>
+      <span class="caption">COLEÇÃO ESSENCIAL · 2026</span>
+    </section>
+
+    <aside>
+      <div class="aside-head"><span>Neste look</span><span id="look-number"></span></div>
+      <h2 id="look-title"></h2>
+      <p class="muted" id="look-mood"></p>
+      <div id="products"></div>
+
+      <div class="purchase">
+        <div class="sizes">
+          <label>Roupa
+            <select id="size">
+              <option value="">Tamanho</option>
+            </select>
+          </label>
+          <label>Calçado
+            <select id="shoe">
+              <option value="">Número</option>
+            </select>
+          </label>
+        </div>
+        <div class="total"><span>Conjunto completo</span><strong id="total"></strong></div>
+        <button class="primary" id="add" type="button">Adicionar conjunto ao cesto ↗</button>
+        <p class="note">Demonstração · sem pagamentos reais</p>
+      </div>
+    </aside>
+  </main>
+
+  <footer>
+    <span>FORMA — ESSENCIAIS PARA TODOS OS DIAS</span>
+    <span>Desenhado para te acompanhar.</span>
+  </footer>
+
+  <div id="message" role="status" aria-live="polite"></div>
+
+  <!-- Ficha da peça: ampliação da peça no modelo + compra individual -->
+  <dialog id="piece" aria-labelledby="piece-name">
+    <div class="piece-layout">
+      <div class="piece-visual">
+        <div id="piece-zoom" class="piece-zoom"></div>
+        <div id="piece-others" class="piece-others" aria-label="Outras peças deste look"></div>
+      </div>
+      <div class="piece-info">
+        <div class="aside-head">
+          <span id="piece-kind"></span>
+          <button id="piece-close" type="button" aria-label="Fechar peça" autofocus>✕</button>
+        </div>
+        <h2 id="piece-name"></h2>
+        <p class="muted" id="piece-detail"></p>
+        <strong class="piece-price" id="piece-price"></strong>
+
+        <p class="size-label" id="piece-size-label"></p>
+        <div id="piece-sizes" class="size-chips"></div>
+
+        <button class="primary" id="piece-add" type="button">Adicionar peça ao cesto ↗</button>
+        <p id="piece-status" class="piece-status" role="status" aria-live="polite"></p>
+        <button id="piece-full" class="link" type="button"></button>
+      </div>
+    </div>
+  </dialog>
+
+  <dialog id="cart">
+    <div class="aside-head">
+      <h2>O teu cesto</h2>
+      <button id="close" type="button" aria-label="Fechar cesto">✕</button>
+    </div>
+    <div id="cart-items"></div>
+    <div class="total" id="cart-total-row"><span>Total</span><strong id="cart-total"></strong></div>
+    <button id="clear" type="button">Esvaziar cesto</button>
+    <p class="note">Protótipo local. O cesto é guardado neste navegador.</p>
+  </dialog>
+
+  <!-- Autenticação (Supabase Auth) -->
+  <dialog id="auth" class="auth-dialog" aria-labelledby="auth-title">
+    <button id="auth-close" class="auth-close" type="button" aria-label="Fechar">✕</button>
+    <span class="auth-brand" id="auth-title">FORMA<span>®</span></span>
+
+    <!-- Entrar -->
+    <form id="auth-login" class="auth-form" novalidate hidden>
+      <h2>Entrar</h2>
+      <p class="muted">Guarda os teus looks e acompanha as tuas compras.</p>
+      <button type="button" class="google-btn">
+        <svg viewBox="0 0 18 18" aria-hidden="true"><path fill="#4285F4" d="M17.64 9.2c0-.64-.06-1.25-.16-1.84H9v3.48h4.84a4.14 4.14 0 0 1-1.8 2.72v2.26h2.92c1.7-1.57 2.68-3.88 2.68-6.62z"/><path fill="#34A853" d="M9 18c2.43 0 4.47-.8 5.96-2.18l-2.92-2.26c-.8.54-1.84.86-3.04.86-2.34 0-4.32-1.58-5.03-3.7H.96v2.33A9 9 0 0 0 9 18z"/><path fill="#FBBC05" d="M3.97 10.72A5.41 5.41 0 0 1 3.68 9c0-.6.1-1.18.29-1.72V4.95H.96A9 9 0 0 0 0 9c0 1.45.35 2.83.96 4.05l3.01-2.33z"/><path fill="#EA4335" d="M9 3.58c1.32 0 2.5.45 3.44 1.35l2.58-2.58A9 9 0 0 0 .96 4.95l3.01 2.33C4.68 5.16 6.66 3.58 9 3.58z"/></svg>
+        Continuar com Google
+      </button>
+      <div class="divider"><span>ou</span></div>
+      <label>Email
+        <input name="email" type="email" autocomplete="email" inputmode="email" required>
+      </label>
+      <label>Palavra-passe
+        <span class="password-field">
+          <input name="password" type="password" autocomplete="current-password" required>
+          <button type="button" class="show-password" aria-pressed="false">Mostrar</button>
+        </span>
+      </label>
+      <button type="button" class="link-inline align-end" data-goto="forgot">Esqueceste-te da palavra-passe?</button>
+      <p class="form-status" role="alert" aria-live="polite"></p>
+      <button class="primary" type="submit">Entrar</button>
+      <p class="switch">Ainda não tens conta? <button type="button" class="link-inline" data-goto="signup">Criar conta</button></p>
+    </form>
+
+    <!-- Criar conta -->
+    <form id="auth-signup" class="auth-form" novalidate hidden>
+      <h2>Criar conta</h2>
+      <p class="muted">Vais receber um email para confirmar o endereço.</p>
+      <button type="button" class="google-btn">
+        <svg viewBox="0 0 18 18" aria-hidden="true"><path fill="#4285F4" d="M17.64 9.2c0-.64-.06-1.25-.16-1.84H9v3.48h4.84a4.14 4.14 0 0 1-1.8 2.72v2.26h2.92c1.7-1.57 2.68-3.88 2.68-6.62z"/><path fill="#34A853" d="M9 18c2.43 0 4.47-.8 5.96-2.18l-2.92-2.26c-.8.54-1.84.86-3.04.86-2.34 0-4.32-1.58-5.03-3.7H.96v2.33A9 9 0 0 0 9 18z"/><path fill="#FBBC05" d="M3.97 10.72A5.41 5.41 0 0 1 3.68 9c0-.6.1-1.18.29-1.72V4.95H.96A9 9 0 0 0 0 9c0 1.45.35 2.83.96 4.05l3.01-2.33z"/><path fill="#EA4335" d="M9 3.58c1.32 0 2.5.45 3.44 1.35l2.58-2.58A9 9 0 0 0 .96 4.95l3.01 2.33C4.68 5.16 6.66 3.58 9 3.58z"/></svg>
+        Continuar com Google
+      </button>
+      <div class="divider"><span>ou</span></div>
+      <label>Nome
+        <input name="fullname" type="text" autocomplete="name" maxlength="80" required>
+      </label>
+      <label>Email
+        <input name="email" type="email" autocomplete="email" inputmode="email" required>
+      </label>
+      <label>Palavra-passe <small>(mínimo 8 caracteres)</small>
+        <span class="password-field">
+          <input name="password" type="password" autocomplete="new-password" minlength="8" required>
+          <button type="button" class="show-password" aria-pressed="false">Mostrar</button>
+        </span>
+      </label>
+      <label>Confirmar palavra-passe
+        <input name="confirm" type="password" autocomplete="new-password" required>
+      </label>
+      <p class="form-status" role="alert" aria-live="polite"></p>
+      <button class="primary" type="submit">Criar conta</button>
+      <p class="switch">Já tens conta? <button type="button" class="link-inline" data-goto="login">Entrar</button></p>
+    </form>
+
+    <!-- Recuperar palavra-passe -->
+    <form id="auth-forgot" class="auth-form" novalidate hidden>
+      <h2>Recuperar palavra-passe</h2>
+      <p class="muted">Indica o teu email e enviamos-te um link para definires uma nova palavra-passe.</p>
+      <label>Email
+        <input name="email" type="email" autocomplete="email" inputmode="email" required>
+      </label>
+      <p class="form-status" role="alert" aria-live="polite"></p>
+      <button class="primary" type="submit">Enviar link</button>
+      <p class="switch"><button type="button" class="link-inline" data-goto="login">← Voltar a entrar</button></p>
+    </form>
+
+    <!-- Nova palavra-passe (após o link de recuperação, ou a partir da conta) -->
+    <form id="auth-reset" class="auth-form" novalidate hidden>
+      <h2>Nova palavra-passe</h2>
+      <p class="muted">Escolhe uma nova palavra-passe com pelo menos 8 caracteres.</p>
+      <label>Nova palavra-passe
+        <span class="password-field">
+          <input name="password" type="password" autocomplete="new-password" minlength="8" required>
+          <button type="button" class="show-password" aria-pressed="false">Mostrar</button>
+        </span>
+      </label>
+      <label>Confirmar nova palavra-passe
+        <input name="confirm" type="password" autocomplete="new-password" required>
+      </label>
+      <p class="form-status" role="alert" aria-live="polite"></p>
+      <button class="primary" type="submit">Guardar nova palavra-passe</button>
+    </form>
+
+    <!-- A minha conta -->
+    <form id="auth-account" class="auth-form" novalidate hidden>
+      <h2>A minha conta</h2>
+      <p class="muted">Membro desde <span id="account-since"></span><span id="account-google" hidden> · ligado com Google</span></p>
+      <label>Email
+        <input id="account-email" type="email" readonly>
+      </label>
+      <label>Nome
+        <input id="account-name" name="fullname" type="text" autocomplete="name" maxlength="80" required>
+      </label>
+      <p class="form-status" role="alert" aria-live="polite"></p>
+      <button class="primary" type="submit">Guardar alterações</button>
+      <div class="account-links">
+        <button type="button" class="link-inline" data-goto="reset">Alterar palavra-passe</button>
+        <button type="button" class="link-inline" id="account-signout">Terminar sessão</button>
+      </div>
+    </form>
+
+    <!-- Mensagens (confirmações e erros) -->
+    <div id="auth-notice" class="auth-form auth-notice" hidden>
+      <span class="notice-icon" aria-hidden="true"></span>
+      <h2 id="auth-notice-title"></h2>
+      <p id="auth-notice-text"></p>
+      <button class="primary" type="button" id="auth-notice-action" hidden></button>
+      <p class="form-status" role="alert" aria-live="polite"></p>
+    </div>
+  </dialog>
+
+  <script src="app.js"></script>
+  <!-- Supabase JS (versão fixa) + configuração local + autenticação -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.118.0/dist/umd/supabase.min.js"></script>
+  <script src="config.js" onerror="window.FORMA_CONFIG = window.FORMA_CONFIG || null"></script>
+  <script src="auth.js"></script>
+</body>
+</html>
