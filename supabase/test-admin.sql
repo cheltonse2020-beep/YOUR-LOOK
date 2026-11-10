@@ -11,9 +11,26 @@ insert into auth.users (id, email, raw_user_meta_data, aud, role) values
   ('00000000-0000-4000-8000-0000000000c3', 'cliente.teste@example.invalid', '{"full_name":"Cliente Teste"}', 'authenticated', 'authenticated');
 update public.profiles set is_admin = true where id = '00000000-0000-4000-8000-0000000000a1';   -- como no SQL Editor
 
+-- Registo malicioso: metadados a pedir administrador NÃO dão permissão
+insert into auth.users (id, email, raw_user_meta_data, aud, role) values
+  ('00000000-0000-4000-8000-0000000000e1', 'esperto.teste@example.invalid', '{"full_name":"Esperto","is_admin":true,"role":"admin"}', 'authenticated', 'authenticated');
+do $$
+begin
+  assert (select is_admin from public.profiles where id = '00000000-0000-4000-8000-0000000000e1') = false,
+         'FALHOU: o registo atribuiu administrador a partir dos metadados';
+end $$;
+
 -- ======================= Cliente comum =======================
 set local role authenticated;
 select set_config('request.jwt.claims', '{"sub":"00000000-0000-4000-8000-0000000000c3","role":"authenticated"}', true);
+
+do $$
+begin
+  -- O mesmo vale para quem se registou a pedir administrador nos metadados
+  perform set_config('request.jwt.claims', '{"sub":"00000000-0000-4000-8000-0000000000e1","role":"authenticated"}', true);
+  assert not public.is_admin(), 'FALHOU: metadados do registo deram acesso de administrador';
+  perform set_config('request.jwt.claims', '{"sub":"00000000-0000-4000-8000-0000000000c3","role":"authenticated"}', true);
+end $$;
 
 do $$
 declare n int;

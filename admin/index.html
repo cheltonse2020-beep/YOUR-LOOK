@@ -17,15 +17,12 @@
         <p class="muted"><span class="spinner dark" aria-hidden="true"></span> A verificar acesso…</p>
       </div>
 
-      <form id="gate-login" class="gate-view form" novalidate hidden>
-        <h1>Entrar no painel</h1>
-        <p class="muted">Área reservada a administradores.</p>
-        <label>Email <input name="email" type="email" autocomplete="email" required></label>
-        <label>Palavra-passe <input name="password" type="password" autocomplete="current-password" required></label>
-        <p class="form-status" role="alert" aria-live="polite"></p>
-        <button class="btn primary" type="submit">Entrar</button>
-        <p class="muted small">Entraste na loja com Google? Inicia sessão na <a href="../index.html">loja</a> e volta a esta página.</p>
-      </form>
+      <!-- Sem sessão: o início de sessão é feito no formulário único da loja -->
+      <div id="gate-login" class="gate-view" hidden>
+        <h1>Iniciar sessão</h1>
+        <p class="muted">A abrir o formulário de entrada…</p>
+        <a class="btn primary" href="../index.html?login=admin">Entrar</a>
+      </div>
 
       <div id="gate-denied" class="gate-view" hidden>
         <h1>Acesso recusado</h1>

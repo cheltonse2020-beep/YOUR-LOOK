@@ -19,6 +19,7 @@ Não precisa de npm nem de compilação.
 - `admin/` — painel de administração (`/admin/`): `index.html`, `admin.css`, `admin.js`.
 - `supabase/admin.sql` — migração do painel (categorias, looks, variantes/stock, estados de pagamento e envio, funções `admin_*`, RLS e Storage).
 - `supabase/test-admin.sql` — teste de permissões, stock, publicação e envios (faz rollback).
+- `supabase/first-admin.sql` — atribui o primeiro administrador a partir do email de uma conta existente.
 - `config.example.js` — modelo de configuração; copiar para `config.js` (ignorado pelo git).
 - `supabase/schema.sql` — tabela `profiles`, trigger de criação automática, RLS e proteção de `is_admin`.
 - `supabase/test-rls.sql` — teste de isolamento entre dois utilizadores (corre e faz rollback).
@@ -163,15 +164,17 @@ Na loja, os looks publicados entram no carrossel circular à frente da coleção
 1. **SQL Editor**: executar `supabase/admin.sql` (depois de `schema.sql`, `orders.sql`, `products.sql`, `payments.sql`). Só acrescenta; não apaga dados.
 2. Executar de novo `supabase/products.sql` (preenche cor/forma dos ícones; não altera preços nem estados).
 3. **SQL Editor**: `supabase/test-admin.sql` → `OK: todos os testes de administração passaram`.
-4. **Primeiro administrador** (a conta tem de existir e estar confirmada):
-   ```sql
-   update public.profiles set is_admin = true
-    where id = (select id from auth.users where email = 'o-teu-email@exemplo.pt');
-   ```
-   Só é possível no SQL Editor (quem gere o projeto Supabase). Para retirar: `is_admin = false`.
+4. **Primeiro administrador**: regista a conta na loja e confirma o email; depois abre `supabase/first-admin.sql`, substitui o email na linha `v_email` e executa-o no SQL Editor. O email só serve para encontrar a conta: a permissão fica no **ID do utilizador** (`profiles.is_admin`). O script recusa contas inexistentes ou por confirmar, só altera essa linha e lista os administradores no fim. Para retirar: `update public.profiles set is_admin = false where id = '<user_id>';`.
 5. Se já tinhas publicado a função `stripe-webhook`, publica de novo a versão atual (também grava `payment_status`). A versão antiga continua a funcionar graças a um trigger de compatibilidade.
 
 Stock: produtos **com** variantes ativas só se vendem nas variantes com stock (descontado ao encomendar, reposto ao cancelar). Produtos **sem** variantes vendem-se nos tamanhos padrão, sem controlo de stock. A loja ainda não esconde tamanhos esgotados: o servidor recusa e o cliente vê a mensagem.
+
+## Entrada única (clientes e administrador)
+Há um só formulário de entrada, na loja (email/palavra-passe ou Google). Depois de entrar, o site pergunta ao servidor `is_admin()` — que lê `profiles.is_admin` pelo ID do utilizador autenticado — e:
+- **administrador** → abre `/admin/`;
+- **cliente** → continua na loja (área normal: conta, encomendas, cesto).
+
+A meio de uma encomenda, mesmo um administrador continua no checkout. `/admin/` sem sessão envia para o formulário da loja (`index.html?login=admin`); com sessão de cliente mostra "Acesso recusado". O encaminhamento é só conveniência: a proteção está no Supabase (RLS, funções `admin_*`, políticas do Storage). O registo nunca dá permissão de administrador (metadados como `"is_admin": true` são ignorados) e o site não compara emails para autorizar.
 
 ## Limitações
 O cesto usa `localStorage` (não está ligado à conta). Não há gestão de stock nem reembolsos automáticos (fazem-se no painel da Stripe; o estado da encomenda muda-se no Supabase). Os preços e a marca são exemplos.

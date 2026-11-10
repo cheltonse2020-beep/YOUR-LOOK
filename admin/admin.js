@@ -1086,6 +1086,12 @@
     return false;
   }
 
+  // Formulário único: o painel não tem login próprio
+  function goToLogin() {
+    showGate('login');
+    window.location.replace('../index.html?login=admin');
+  }
+
   async function checkAccess() {
     showGate('loading');
     const { data, error } = await client.rpc('is_admin');
@@ -1110,39 +1116,15 @@
     });
     client.auth.onAuthStateChange((event, s) => {
       session = s;
-      if (event === 'SIGNED_OUT') { closeDrawer(); showGate('login'); }
+      if (event === 'SIGNED_OUT') { closeDrawer(); goToLogin(); }
     });
     const { data } = await client.auth.getSession();
     session = data.session;
-    if (!session) { showGate('login'); return; }
+    if (!session) { goToLogin(); return; }
     await checkAccess();
   }
 
-  $('gate-login').addEventListener('submit', async e => {
-    e.preventDefault();
-    const form = e.currentTarget;
-    const status = form.querySelector('.form-status');
-    const btn = form.querySelector('button[type=submit]');
-    const email = form.email.value.trim();
-    const password = form.password.value;
-    status.textContent = '';
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || !password) { status.textContent = 'Indica o email e a palavra-passe.'; status.dataset.tone = 'error'; return; }
-    btn.disabled = true;
-    btn.innerHTML = '<span class="spinner" aria-hidden="true"></span>A entrar…';
-    const { data, error } = await client.auth.signInWithPassword({ email, password });
-    btn.disabled = false;
-    btn.textContent = 'Entrar';
-    if (error) {
-      status.dataset.tone = 'error';
-      status.textContent = error.code === 'invalid_credentials' ? 'Email ou palavra-passe incorretos.'
-        : error.code === 'email_not_confirmed' ? 'Confirma primeiro o teu email.' : errText(error);
-      return;
-    }
-    session = data.session;
-    form.reset();
-    await checkAccess();
-  });
-  const signOut = async () => { await client.auth.signOut(); showGate('login'); };
+  const signOut = async () => { await client.auth.signOut(); window.location.assign('../index.html'); };
   $('signout').addEventListener('click', signOut);
   $('denied-signout').addEventListener('click', signOut);
 

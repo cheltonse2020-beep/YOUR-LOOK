@@ -17,6 +17,9 @@
   // URL capturado antes de o Supabase limpar ?code= / #error=
   const startUrl = new URL(window.location.href);
   const cameFromAuthRedirect = startUrl.searchParams.has('code');
+  // ?login=1 (ou =admin): abrir o formulário de entrada (o painel /admin/ envia para aqui)
+  const loginRequested = startUrl.searchParams.has('login');
+  let loginFromCheckout = false;   // entrar para concluir uma encomenda: fica na loja
 
   /* ---------- Estado ---------- */
   let client = null;
@@ -260,7 +263,26 @@
       }
       form.reset();
       dialog.close();
+      await routeAfterLogin();
     });
+  }
+
+  /* ---------- Depois de entrar: administrador → /admin/, cliente → loja ----------
+     A decisão é do servidor: is_admin() lê profiles.is_admin pelo ID do utilizador
+     autenticado (campo que o cliente não pode alterar). Não se compara o email aqui.
+     Isto é só encaminhamento; o painel e os dados estão protegidos por RLS. */
+  async function routeAfterLogin() {
+    let fromCheckout = loginFromCheckout;
+    loginFromCheckout = false;
+    try { fromCheckout = fromCheckout || sessionStorage.getItem('forma-resume-checkout') === '1'; } catch { /* ignorar */ }
+    if (fromCheckout || !client) return false;   // a meio de uma encomenda: continua na loja
+    const { data, error } = await client.rpc('is_admin');
+    if (!error && data === true) {
+      toast('Sessão iniciada. A abrir o painel de administração…');
+      window.location.assign(new URL('admin/', window.location.href).href);
+      return true;
+    }
+    return false;   // cliente (ou painel ainda não configurado): área normal da loja
   }
 
   function showResend(form, email) {
@@ -534,7 +556,19 @@
     } else if (error && cameFromAuthRedirect) {
       notice('Não foi possível concluir', ptError(error), { tone: 'error', action: { label: 'Entrar', run: () => showView('login') } });
     } else if (cameFromAuthRedirect && session && !recovering) {
-      toast(`Sessão iniciada. Olá, ${displayName()}!`);
+      if (!(await routeAfterLogin())) toast(`Sessão iniciada. Olá, ${displayName()}!`);
+    }
+
+    if (loginRequested) {
+      const url = new URL(window.location.href);
+      url.searchParams.delete('login');
+      history.replaceState(null, '', url.pathname + url.search + url.hash);
+      if (session) {
+        if (!(await routeAfterLogin())) toast('Já tens sessão iniciada.');
+      } else {
+        showView('login');
+        setStatus($('auth-login'), 'Entra com a tua conta. Se for de administrador, abres o painel.', 'info');
+      }
     }
   }
 
@@ -547,6 +581,7 @@
     // Abre o "Entrar" com uma explicação (ex.: para continuar a encomenda)
     openLogin(message) {
       if (setupProblem) { notice('Iniciar sessão', setupProblem, { tone: 'error' }); return; }
+      loginFromCheckout = true;
       showView('login');
       if (message) setStatus($('auth-login'), message, 'info');
     },
