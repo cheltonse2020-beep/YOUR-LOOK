@@ -14,7 +14,7 @@
 -- =====================================================================
 do $$
 declare
-  v_email text := lower(btrim('o-teu-email@exemplo.pt'));   -- ← substitui aqui
+  v_email text := lower(btrim('cheltonse2025@gmail.com'));   -- ← substitui aqui
   v_user  auth.users%rowtype;
   v_found integer;
   v_others text;
