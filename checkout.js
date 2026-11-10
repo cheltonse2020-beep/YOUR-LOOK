@@ -1,7 +1,7 @@
 'use strict';
 
 /* =========================================================
-   FORMA — encomendas
+   YOUR LOOK — encomendas
    Cesto → "Prosseguir com a encomenda" → (iniciar sessão) → resumo + entrega
    → place_order() no Supabase (preços calculados no servidor) → confirmação.
    Também: "As minhas encomendas" (só as do próprio cliente, por RLS).

@@ -1,5 +1,5 @@
 // =====================================================================
-// FORMA — Edge Function: create-checkout
+// YOUR LOOK — Edge Function: create-checkout
 // Cria uma sessão Stripe Checkout para uma encomenda do próprio cliente.
 //
 // Pedido (do site, com a sessão do cliente):  POST { "order_id": "<uuid>", "embedded": true|false }
@@ -145,7 +145,7 @@ export async function handler(req: Request): Promise<Response> {
       'metadata[order_id]': order.id,
       'metadata[order_number]': String(order.number),
       'payment_intent_data[metadata][order_id]': order.id,
-      'payment_intent_data[description]': `FORMA — encomenda n.º ${order.number}`,
+      'payment_intent_data[description]': `YOUR LOOK — encomenda n.º ${order.number}`,
     };
     if (embedded) {
       p.ui_mode = 'embedded';

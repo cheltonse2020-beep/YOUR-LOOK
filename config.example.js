@@ -1,5 +1,5 @@
 // =====================================================================
-// FORMA — configuração do Supabase (exemplo)
+// YOUR LOOK — configuração do Supabase (exemplo)
 //
 // 1. Copia este ficheiro para "config.js" (na mesma pasta).
 // 2. Substitui os valores pelos do teu projeto:

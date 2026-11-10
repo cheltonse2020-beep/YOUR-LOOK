@@ -1,7 +1,7 @@
 'use strict';
 
 /* =========================================================
-   FORMA — autenticação com Supabase Auth
+   YOUR LOOK — autenticação com Supabase Auth
    - Registo (nome, email, palavra-passe) + confirmação por email
    - Entrar com email/palavra-passe ou Google
    - Recuperar / redefinir palavra-passe

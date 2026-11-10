@@ -1,7 +1,7 @@
 'use strict';
 
 /* =========================================================
-   FORMA — catálogo vindo do Supabase (painel de administração)
+   YOUR LOOK — catálogo vindo do Supabase (painel de administração)
    Lê as categorias e os looks PUBLICADOS e junta-os ao carrossel.
    ?preview=<id> mostra um look em rascunho — só funciona com sessão de
    administrador, porque o RLS esconde rascunhos a toda a gente.

@@ -1,5 +1,5 @@
 // =====================================================================
-// FORMA — Edge Function: stripe-webhook
+// YOUR LOOK — Edge Function: stripe-webhook
 // Recebe os eventos da Stripe e marca a encomenda como paga.
 // É a ÚNICA forma de uma encomenda passar a 'paid' (o browser nunca o faz).
 //

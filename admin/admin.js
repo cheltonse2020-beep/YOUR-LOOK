@@ -1,7 +1,7 @@
 'use strict';
 
 /* =========================================================
-   FORMA — painel de administração
+   YOUR LOOK — painel de administração
    Toda a autorização é feita no Supabase (is_admin(), RLS, funções admin_*,
    políticas do Storage). Este ficheiro só mostra o que a base de dados permite:
    uma conta sem permissão não consegue ler nem alterar nada, mesmo alterando o código.
@@ -221,7 +221,7 @@
     document.querySelectorAll('.nav a').forEach(a => { if (a.dataset.section === name) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current'); });
     $('section-title').textContent = SECTIONS[name].title;
     $('section-actions').innerHTML = '';
-    document.title = `${SECTIONS[name].title} · FORMA Admin`;
+    document.title = `${SECTIONS[name].title} · YOUR LOOK Admin`;
     refresh();
   }
   async function refresh() {

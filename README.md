@@ -1,4 +1,4 @@
-# FORMA — Experimenta o look
+# YOUR LOOK — Experimenta o look
 
 Protótipo estático: fila de 5 conjuntos com profundidade (o central em foco, os laterais mais pequenos e desfocados), categorias, pontos sobre as peças na vista ampliada, painel "Neste look", cesto local e contas de utilizador com Supabase.
 
