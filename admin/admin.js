@@ -721,7 +721,7 @@
         ${selectHtml('cat', [['', 'Todas as categorias'], ...cache.categories.map(c => [c.id, c.name])], s.cat, 'Categoria')}
       </div>
       <div id="list"></div>
-      <p class="field-hint">Os looks publicados aparecem no carrossel da loja, à frente da coleção original, pela ordem definida aqui (dentro de cada categoria).</p></section>`;
+      <p class="field-hint">Os looks publicados aparecem no carrossel da loja pela ordem definida aqui (dentro de cada categoria).</p></section>`;
     listCtl = { state: s, update: drawLooks };
     drawLooks();
   }
@@ -743,7 +743,7 @@
     const page = Math.min(s.page, Math.max(1, Math.ceil(rows.length / size)));
     s.page = page;
     $('list').innerHTML = !rows.length
-      ? emptyHtml(looksData.length ? 'Nenhum look corresponde à pesquisa' : 'Ainda não há looks criados no painel', looksData.length ? 'Muda a pesquisa ou os filtros.' : 'A loja mostra a coleção original. Cria um look para o juntar ao carrossel.')
+      ? emptyHtml(looksData.length ? 'Nenhum look corresponde à pesquisa' : 'Ainda não há looks criados no painel', looksData.length ? 'Muda a pesquisa ou os filtros.' : 'A loja mostra «Coleção em preparação». Cria e publica um look para o pôr no carrossel.')
       : `<div class="table-wrap"><table><thead><tr><th>Look</th><th class="hide-sm">Categoria</th><th class="num">Peças</th><th class="num">Conjunto</th><th>Ordem</th><th>Estado</th><th></th></tr></thead><tbody>
         ${rows.slice((page - 1) * size, page * size).map(l => {
           const pieces = lookPieces(l);

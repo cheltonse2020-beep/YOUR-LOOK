@@ -1,6 +1,6 @@
 -- =====================================================================
--- FORMA — catálogo inicial de produtos (GERADO por supabase/generate-products.mjs)
--- Não editar à mão. Executar no SQL Editor depois de orders.sql (e de novo após admin.sql).
+-- YOUR LOOK — produtos de DEMONSTRAÇÃO (usados pelos testes SQL; esconder com archive-demo-products.sql)
+-- Executar no SQL Editor depois de orders.sql. Os produtos reais criam-se no painel (/admin, Produtos).
 -- Só ACRESCENTA produtos que ainda não existem: nunca altera preços, nomes ou
 -- estados definidos no painel de administração.
 -- =====================================================================

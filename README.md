@@ -12,10 +12,10 @@ Não precisa de npm nem de compilação.
 ## Ficheiros
 - `index.html` — estrutura e textos fixos (inclui os gradientes SVG partilhados `#shade` e `#floor`).
 - `style.css` — cores (variáveis em `:root`), disposição, animações e telemóvel.
-- `app.js` — dados (`LOOKS`), ilustrações (`figure`), carrossel, pontos e cesto.
+- `app.js` — categorias iniciais, carrossel, pontos, ficha da peça e cesto (os looks vêm do painel).
 - `auth.js` — autenticação (Supabase Auth) e "A minha conta".
 - `checkout.js` — "Prosseguir com a encomenda", entrega, confirmação e "As minhas encomendas".
-- `catalog.js` — junta à loja as categorias e os looks publicados no painel (Supabase).
+- `catalog.js` — carrega as categorias e os looks publicados no painel (Supabase).
 - `admin/` — painel de administração (`/admin/`): `index.html`, `admin.css`, `admin.js`.
 - `supabase/admin.sql` — migração do painel (categorias, looks, variantes/stock, estados de pagamento e envio, funções `admin_*`, RLS e Storage).
 - `supabase/test-admin.sql` — teste de permissões, stock, publicação e envios (faz rollback).
@@ -25,30 +25,33 @@ Não precisa de npm nem de compilação.
 - `supabase/test-rls.sql` — teste de isolamento entre dois utilizadores (corre e faz rollback).
 - `supabase/verify-auth.mjs` — verificação real, pela API, com duas contas de teste.
 - `supabase/orders.sql` — catálogo de preços, encomendas, linhas, RLS e função `place_order`.
-- `supabase/products.sql` — preços oficiais (gerado por `supabase/generate-products.mjs` a partir de `app.js`).
+- `supabase/products.sql` — 68 produtos de demonstração (usados pelos testes SQL).
+- `supabase/archive-demo-products.sql` — esconde (arquiva, sem apagar) esses produtos de demonstração.
 - `supabase/test-orders.sql` — teste das encomendas (preços no servidor, validação, isolamento; faz rollback).
 - `supabase/payments.sql` — campos de pagamento Stripe nas encomendas.
 - `supabase/functions/create-checkout` — Edge Function que cria o pagamento Stripe de uma encomenda do cliente.
 - `supabase/functions/stripe-webhook` — Edge Function que recebe a confirmação da Stripe e marca a encomenda como paga.
 - `supabase/config.toml` — configuração das funções (sem verificação de JWT no gateway; ver abaixo).
 
-## Editar os looks
-Os 30 looks da coleção principal estão em `LOOK_TABLE` (`app.js`), uma linha por look:
-`[nome, corpo, parte de cima, calças, calçado, descrição opcional]`.
-- `corpo` é um índice de `BODIES` (pele, cabelo `short` | `buzz` | `mop` | `locs`, cor do cabelo, `glasses` opcional);
-- as peças são chaves dos catálogos `TOPS` (`sweater` | `tee`), `PANTS` (`baggy` | `straight`) e `SHOES`, com nome, cor e preço.
+## Os looks (modelos)
+A loja já não traz looks de demonstração: o carrossel mostra **só os looks publicados no painel** (`/admin/` → *Looks e carrossel*). Enquanto não houver nenhum, aparece "Coleção em preparação"; numa categoria sem looks, "Ainda sem looks nesta categoria".
 
-Sem descrição, é gerada a partir das cores ("Cru com ganga crua."). O total do conjunto é a soma das peças.
+Para adicionar um modelo real:
+1. **Produtos** → criar cada peça (nome, tipo, cor, preço, fotografia, tamanhos/stock) e publicá-la.
+2. **Looks e carrossel** → criar o look: nome, categoria, descrição, **fotografia do modelo** e as peças.
+3. **Pré-visualizar** e depois **Publicar**. O look aparece logo na loja, pela ordem definida.
+
+Fotografia do modelo: PNG ou WebP **com fundo transparente**, de corpo inteiro, proporção **2:5** (ex.: 800 × 2000 px), até 5 MB, com o mesmo enquadramento em todas (cabeça no topo, pés em baixo). Os pontos brancos da vista ampliada ficam em `PIN_POSITIONS` (`app.js`, percentagens da figura): parte de cima a 30 %, calças a 70 %, calçado a 94 % da altura.
 
 ## Carrossel
 Os modelos percorrem uma órbita elíptica (seno → posição, cosseno → profundidade), animada com `requestAnimationFrame`. Com mais de 10 looks, só 10 posições ficam na órbita; os restantes esperam escondidos atrás e entram em fade. Afina em `ORBIT` (`slots`, `radius`, `minScale`, `maxBlur`, `duration`).
 
 ## Categorias
 No topo há separadores **Tudo · Date Night · Gym · Beach · Run** (também por link: `index.html#gym`, `#beach`, `#run`, `#date-night`). Ao mudar, o carrossel mostra só os looks dessa categoria e entra a rodar.
-As categorias estão em `CATEGORIES` (`app.js`): cada uma tem `looks` próprios (mesmo formato de `LOOK_TABLE`) e pode incluir looks da coleção principal pelo nome (`include`). As peças novas (camisas, camisolas de alças, calções, joggers, sandálias, sapatilhas de corrida/treino) foram acrescentadas a `TOPS`, `PANTS` e `SHOES`, com os estilos `shirt`, `camp`, `tank`, `jogger`, `shorts`, `runshorts` e `sandal`.
+As categorias geram-se no painel (*Categorias*: nome, ordem, visibilidade). `CATEGORIES` em `app.js` só serve enquanto o painel não responde.
 
 ## Comprar peças soltas
-Na vista ampliada (clicar no modelo da frente), os pontos brancos marcam cada peça; clicar num ponto (ou numa peça do painel) abre a ficha da peça: a peça ampliada no próprio modelo (recorte em `PIECE_CROP`), tamanho (XS–XL) ou número (38–46), preço e "Adicionar peça ao cesto". As miniaturas em baixo trocam entre as peças do look. O cesto aceita peças soltas e conjuntos completos.
+Na vista ampliada (clicar no modelo da frente), os pontos brancos marcam cada peça; clicar num ponto (ou numa peça do painel) abre a ficha da peça: a fotografia da peça (ou do modelo, se a peça não tiver), tamanho (XS–XL) ou número (38–46), preço e "Adicionar peça ao cesto". As miniaturas em baixo trocam entre as peças do look. O cesto aceita peças soltas e conjuntos completos.
 
 ## Ecrãs e dispositivos
 O tamanho dos modelos depende da altura **e** da largura do palco (`--model-h` com unidades `cqh`/`cqw` em `.studio`), por isso cabem em qualquer ecrã. Pontos de quebra em `style.css`:
@@ -59,9 +62,6 @@ O tamanho dos modelos depende da altura **e** da largura do palco (`--model-h` c
 - **≤ 360px** — telemóveis pequenos: o link "Coleção 01" esconde-se;
 - **altura ≤ 520px na horizontal** — telemóveis deitados: palco e painel lado a lado, título compacto;
 - **ecrãs táteis** — pontos, setas e tamanhos maiores para os dedos.
-
-## Usar fotografias
-As figuras são ilustrações SVG. Para o efeito realista, substitui o retorno de `figure()` por `<img src="assets/look-1.webp" alt="">` com PNG/WebP transparentes de corpo inteiro, proporção 2:5 e o mesmo enquadramento em todas, e acrescenta `.model img { width:100%; height:100%; object-fit:contain; }`. Ajusta `PIN_POSITIONS` (percentagens da figura) se necessário.
 
 ## Autenticação (Supabase)
 Registo com nome/email/palavra-passe e confirmação por email, entrar com email ou Google, recuperar e redefinir a palavra-passe, terminar sessão, sessão restaurada ao recarregar, e "A minha conta" para ver e editar o nome. O catálogo, as categorias e o cesto funcionam sem sessão.
@@ -113,10 +113,10 @@ Segurança:
 
 Configurar (SQL Editor, por esta ordem, depois de `schema.sql`):
 1. `supabase/orders.sql`
-2. `supabase/products.sql`
+2. `supabase/products.sql` (produtos de demonstração, usados pelo teste)
 3. `supabase/test-orders.sql` → deve terminar com `OK: todos os testes de encomendas passaram`.
 
-Se mudares peças ou preços em `app.js`: `node supabase/generate-products.mjs` e volta a executar `products.sql`.
+Os preços oficiais são os da tabela `products`, geridos no painel (*Produtos*).
 
 Gerir estados (pela loja, no SQL Editor ou no Table Editor): `update public.orders set status = 'paid' where number = 1001;` (estados: `pending_payment`, `paid`, `shipped`, `delivered`, `cancelled`).
 
@@ -158,12 +158,13 @@ Segurança — tudo é validado no Supabase, não no browser:
 - Encomendas: **pagamento** (`payment_status`) e **envio** (`fulfillment_status`) são separados. O pagamento só muda pelo webhook da Stripe; o painel só gere preparação/envio, não envia sem pagamento confirmado, e cancelar repõe o stock (o reembolso faz-se na Stripe). As linhas mantêm nome, cor, tamanho e preço do momento da compra.
 - Produtos e looks **arquivam-se**, não se apagam. Um look só é publicado com imagem e pelo menos um produto publicado.
 
-Na loja, os looks publicados entram no carrossel circular à frente da coleção original, pela ordem definida no painel. `index.html?preview=<id>` mostra um rascunho só a administradores.
+Na loja, o carrossel circular mostra os looks publicados, pela ordem definida no painel. `index.html?preview=<id>` mostra um rascunho só a administradores.
 
 ### Configurar
 1. **SQL Editor**: executar `supabase/admin.sql` (depois de `schema.sql`, `orders.sql`, `products.sql`, `payments.sql`). Só acrescenta; não apaga dados.
 2. Executar de novo `supabase/products.sql` (preenche cor/forma dos ícones; não altera preços nem estados).
 3. **SQL Editor**: `supabase/test-admin.sql` → `OK: todos os testes de administração passaram`.
+3b. **Só depois dos testes**: `supabase/archive-demo-products.sql` esconde os 68 produtos de demonstração (arquiva-os; nada é apagado e as encomendas antigas ficam intactas). Os testes SQL usam esses produtos, por isso correm antes.
 4. **Primeiro administrador**: regista a conta na loja e confirma o email; depois abre `supabase/first-admin.sql`, substitui o email na linha `v_email` e executa-o no SQL Editor. O email só serve para encontrar a conta: a permissão fica no **ID do utilizador** (`profiles.is_admin`). O script recusa contas inexistentes ou por confirmar, só altera essa linha e lista os administradores no fim. Para retirar: `update public.profiles set is_admin = false where id = '<user_id>';`.
 5. Se já tinhas publicado a função `stripe-webhook`, publica de novo a versão atual (também grava `payment_status`). A versão antiga continua a funcionar graças a um trigger de compatibilidade.
 

@@ -11,7 +11,8 @@
   const auth = window.FORMA_AUTH;
   const cfg = window.FORMA_CONFIG;
   const store = window.FORMA_STORE;
-  if (!auth?.client || !cfg?.supabaseUrl || !store) return;
+  if (!store) return;
+  if (!auth?.client || !cfg?.supabaseUrl) { store.applyRemote(); return; }   // sem Supabase: loja vazia
   const client = auth.client;
 
   const base = cfg.supabaseUrl.replace(/\/$/, '');
@@ -78,7 +79,8 @@
       preview: previewName,
     });
   } catch (err) {
-    // Tabelas ainda não criadas (admin.sql por executar) ou sem ligação: mantém a coleção original
-    console.warn('[FORMA] Catálogo do Supabase indisponível; a mostrar a coleção original.', err?.message || err);
+    // Tabelas ainda não criadas (admin.sql por executar) ou sem ligação
+    console.warn('[FORMA] Catálogo do Supabase indisponível.', err?.message || err);
+    store.applyRemote();
   }
 })();
