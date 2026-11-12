@@ -21,13 +21,38 @@
   const PUB = { draft: ['Rascunho', ''], published: ['Publicado', 'ok'], archived: ['Arquivado', 'bad'] };
   const PAY = { pending: ['A aguardar pagamento', 'warn'], paid: ['Pago', 'ok'], failed: ['Pagamento falhou', 'bad'], refunded: ['Reembolsado', 'info'] };
   const FUL = { unfulfilled: ['Por preparar', ''], preparing: ['Em preparação', 'info'], shipped: ['Enviada', 'info'], delivered: ['Entregue', 'ok'], cancelled: ['Cancelada', 'bad'] };
-  const KIND = { top: 'Parte de cima', pants: 'Calças / calções', shoes: 'Calçado' };
+  const KIND = { top: 'Parte de cima', pants: 'Calças / calções', shoes: 'Calçado', accessory: 'Acessório' };
   const STYLES = {
     top: [['sweater', 'Camisola / sweat'], ['tee', 'T-shirt'], ['shirt', 'Camisa'], ['camp', 'Camisa de manga curta'], ['tank', 'Camisola de alças']],
     pants: [['baggy', 'Larga'], ['straight', 'Direita'], ['jogger', 'Jogger'], ['shorts', 'Calções / bermudas'], ['runshorts', 'Calções curtos']],
     shoes: [['', 'Sapatilha / sapato / bota'], ['sandal', 'Sandália / chinelo']],
+    accessory: [['glasses', 'Óculos'], ['watch', 'Relógio'], ['necklace', 'Colar / fio'], ['hat', 'Chapéu / boné'], ['bag', 'Mala / mochila'], ['belt', 'Cinto'], ['other', 'Outro']],
   };
-  const DEFAULT_SIZES = { top: ['XS', 'S', 'M', 'L', 'XL'], pants: ['XS', 'S', 'M', 'L', 'XL'], shoes: ['38', '39', '40', '41', '42', '43', '44', '45', '46'] };
+  // Tamanhos padrão (quando o produto não tem lista própria) e tamanhos que se podem ativar
+  const DEFAULT_SIZES = { top: ['XS', 'S', 'M', 'L', 'XL'], pants: ['XS', 'S', 'M', 'L', 'XL'], shoes: ['38', '39', '40', '41', '42', '43', '44', '45', '46'], accessory: ['U'] };
+  const SIZE_CHOICES = {
+    top: ['XS', 'S', 'M', 'L', 'XL', 'XXL'],
+    pants: ['XS', 'S', 'M', 'L', 'XL', 'XXL'],
+    shoes: ['36', '37', '38', '39', '40', '41', '42', '43', '44', '45', '46'],
+    accessory: ['U'],
+  };
+  let sizesSupported = true;   // false enquanto supabase/look-slots.sql não for executado
+  const activeSizes = p => (p?.sizes?.length ? p.sizes : DEFAULT_SIZES[p?.kind || 'top']);
+  const isTracked = p => (p?.product_variants || []).some(v => v.active);
+  const sameList = (a, b) => a.length === b.length && a.every((x, i) => x === b[i]);
+  // Botões de tamanho (ligar/desligar); a ordem segue SIZE_CHOICES
+  function sizeChipsHtml(kind, selected, attrs = '') {
+    if (kind === 'accessory') return '<span class="muted small">Tamanho único</span>';
+    const choices = [...new Set([...SIZE_CHOICES[kind], ...selected])];
+    return `<div class="size-chips" role="group" aria-label="Tamanhos à venda">${choices.map(sz => `
+      <label class="size-chip"><input type="checkbox" value="${esc(sz)}" ${selected.includes(sz) ? 'checked' : ''} ${attrs}><span>${esc(sz)}</span></label>`).join('')}</div>`;
+  }
+  const readChips = (root, kind) => {
+    if (kind === 'accessory') return ['U'];
+    const order = SIZE_CHOICES[kind];
+    return [...root.querySelectorAll('.size-chip input:checked')].map(i => i.value)
+      .sort((a, b) => (order.indexOf(a) + 1 || 99) - (order.indexOf(b) + 1 || 99));
+  };
   const badge = (map, key) => { const [t, c] = map[key] || [key, '']; return `<span class="badge ${c}">${esc(t)}</span>`; };
 
   /* ---------- Erros em português ---------- */
@@ -88,6 +113,7 @@
     setDrawerStatus('');
     $('drawer').classList.toggle('wide', wide);
     drawerSubmit = onSubmit;
+    $('drawer-form').oninput = null;   // o formulário é partilhado: não herdar o do formulário anterior
     if (!$('drawer').open) $('drawer').showModal();
     $('drawer-body').scrollTop = 0;
     onReady?.($('drawer-form'));
@@ -193,9 +219,15 @@
   const cache = { products: null, categories: null };
   async function loadProducts(force = false) {
     if (cache.products && !force) return cache.products;
-    cache.products = check(await client.from('products')
-      .select('sku, kind, name, color_name, color_hex, style, description, images, price, status, updated_at, product_variants(id, color_name, color_hex, size, stock, active)')
-      .order('name'));
+    const fields = 'sku, kind, name, color_name, color_hex, style, description, images, price, status, updated_at, product_variants(id, color_name, color_hex, size, stock, active)';
+    let res = await client.from('products').select(`${fields}, sizes`).order('name');
+    if (res.error && (res.error.code === '42703' || /sizes/.test(res.error.message || ''))) {
+      sizesSupported = false;   // coluna ainda não existe: funciona como antes, sem tamanhos por produto
+      res = await client.from('products').select(fields).order('name');
+    } else if (!res.error) {
+      sizesSupported = true;
+    }
+    cache.products = check(res).map(p => ({ ...p, sizes: p.sizes || [] }));
     return cache.products;
   }
   async function loadCategories(force = false) {
@@ -305,6 +337,8 @@
      2. Produtos
      ========================================================= */
   const productState = { q: '', status: 'active', kind: '', page: 1 };
+  const selected = new Set();   // SKUs selecionados (ações em conjunto)
+  let bulkBusy = false;
   const PRODUCT_PAGE = 15;
 
   async function renderProducts() {
@@ -317,8 +351,9 @@
       <div class="toolbar">
         <input type="search" data-q placeholder="Pesquisar por nome, cor ou SKU" value="${esc(s.q)}" aria-label="Pesquisar produtos">
         ${selectHtml('status', [['active', 'Ativos'], ['published', 'Publicados'], ['draft', 'Rascunhos'], ['archived', 'Arquivados'], ['all', 'Todos']], s.status, 'Estado')}
-        ${selectHtml('kind', [['', 'Todos os tipos'], ['top', KIND.top], ['pants', KIND.pants], ['shoes', KIND.shoes]], s.kind, 'Tipo')}
+        ${selectHtml('kind', [['', 'Todos os tipos'], ...Object.entries(KIND)], s.kind, 'Tipo')}
       </div>
+      <div id="bulk" aria-live="polite"></div>
       <div id="list"></div></section>`;
     listCtl = { state: s, update: drawProducts };
     drawProducts();
@@ -329,22 +364,31 @@
     return vs.length ? vs.reduce((t, v) => t + v.stock, 0) : null;
   }
 
-  function drawProducts() {
+  function filteredProducts() {
     const s = productState;
     const q = norm(s.q);
-    const rows = cache.products.filter(p =>
+    return cache.products.filter(p =>
       (s.status === 'all' || (s.status === 'active' ? p.status !== 'archived' : p.status === s.status))
       && (!s.kind || p.kind === s.kind)
       && (!q || norm(`${p.name} ${p.color_name} ${p.sku}`).includes(q)));
+  }
+
+  function drawProducts() {
+    const s = productState;
+    const q = norm(s.q);
+    const rows = filteredProducts();
+    [...selected].forEach(sku => { if (!cache.products.some(p => p.sku === sku)) selected.delete(sku); });
     const page = Math.min(s.page, Math.max(1, Math.ceil(rows.length / PRODUCT_PAGE)));
     s.page = page;
     const slice = rows.slice((page - 1) * PRODUCT_PAGE, page * PRODUCT_PAGE);
     $('list').innerHTML = !rows.length
       ? emptyHtml(cache.products.length ? 'Nenhum produto corresponde à pesquisa' : 'Ainda não há produtos', cache.products.length ? 'Muda a pesquisa ou os filtros.' : 'Cria o primeiro produto.')
-      : `<div class="table-wrap"><table><thead><tr><th>Produto</th><th class="hide-sm">Tipo</th><th class="hide-sm">Cor</th><th class="num">Preço</th><th class="num">Stock</th><th>Estado</th><th></th></tr></thead><tbody>
+      : `<div class="table-wrap"><table><thead><tr><th class="check-col"><input type="checkbox" data-select-page aria-label="Selecionar todos desta página"></th><th>Produto</th><th class="hide-sm">Tipo</th><th class="hide-sm">Cor</th><th class="num">Preço</th><th class="num">Stock</th><th>Estado</th><th></th></tr></thead><tbody>
         ${slice.map(p => {
           const st = stockOf(p);
-          return `<tr>
+          const on = selected.has(p.sku);
+          return `<tr class="${on ? 'selected' : ''}">
+            <td class="check-col"><input type="checkbox" data-select="${esc(p.sku)}" ${on ? 'checked' : ''} aria-label="Selecionar ${esc(p.name)}"></td>
             <td><div class="cell-main">${p.images?.[0] ? `<img class="thumb" src="${esc(p.images[0])}" alt="">` : `<span class="thumb"><span class="dot" style="background:${esc(p.color_hex || '#ccc')};margin:0"></span></span>`}
               <span>${esc(p.name)}<small>${esc(p.sku)}</small></span></div></td>
             <td class="hide-sm">${esc(KIND[p.kind])}</td>
@@ -357,14 +401,124 @@
               ${p.status === 'draft' ? `<button class="btn small" type="button" data-publish="${esc(p.sku)}">Publicar</button>` : ''}
               ${p.status === 'archived' ? `<button class="btn small" type="button" data-restore="${esc(p.sku)}">Restaurar</button>`
                 : `<button class="btn small danger" type="button" data-archive="${esc(p.sku)}">Arquivar</button>`}
+              <button class="btn small danger" type="button" data-delete="${esc(p.sku)}">Eliminar</button>
             </td></tr>`;
         }).join('')}</tbody></table></div>${pagerHtml(rows.length, page, PRODUCT_PAGE)}`;
+    syncPageCheckbox(slice);
+    drawBulk(rows);
+  }
+
+  // Caixa do cabeçalho: marcada se todos os da página estão selecionados; "meio" se só alguns
+  function syncPageCheckbox(slice = currentSlice()) {
+    const box = document.querySelector('[data-select-page]');
+    if (!box) return;
+    const n = slice.filter(p => selected.has(p.sku)).length;
+    box.checked = n > 0 && n === slice.length;
+    box.indeterminate = n > 0 && n < slice.length;
+  }
+  function currentSlice() {
+    const skus = [...document.querySelectorAll('[data-select]')].map(i => i.dataset.select);
+    return cache.products.filter(p => skus.includes(p.sku));
+  }
+
+  function drawBulk(rows = filteredProducts()) {
+    const box = $('bulk');
+    if (!box) return;
+    if (!selected.size) { box.innerHTML = ''; return; }
+    const allFiltered = rows.length > selected.size && rows.some(p => !selected.has(p.sku));
+    box.innerHTML = `<div class="bulk-bar">
+        <strong>${selected.size} ${selected.size === 1 ? 'produto selecionado' : 'produtos selecionados'}</strong>
+        ${allFiltered ? `<button class="btn small link" type="button" data-select-filtered>Selecionar todos os ${rows.length} da lista</button>` : ''}
+        <span class="grow"></span>
+        <button class="btn small" type="button" data-bulk="published" ${bulkBusy ? 'disabled' : ''}>Publicar</button>
+        <button class="btn small" type="button" data-bulk="archived" ${bulkBusy ? 'disabled' : ''}>Arquivar</button>
+        <button class="btn small danger" type="button" data-bulk="delete" ${bulkBusy ? 'disabled' : ''}>Eliminar</button>
+        <button class="btn small" type="button" data-bulk-clear ${bulkBusy ? 'disabled' : ''}>Limpar seleção</button>
+      </div>`;
+  }
+
+  content().addEventListener('change', e => {
+    if (current !== 'products') return;
+    const one = e.target.closest('[data-select]');
+    const page = e.target.closest('[data-select-page]');
+    if (one) {
+      if (one.checked) selected.add(one.dataset.select); else selected.delete(one.dataset.select);
+      one.closest('tr').classList.toggle('selected', one.checked);
+    } else if (page) {
+      document.querySelectorAll('[data-select]').forEach(i => {
+        i.checked = page.checked;
+        if (page.checked) selected.add(i.dataset.select); else selected.delete(i.dataset.select);
+        i.closest('tr').classList.toggle('selected', page.checked);
+      });
+    } else return;
+    syncPageCheckbox();
+    drawBulk();
+  });
+
+  const listNames = list => {
+    const names = list.slice(0, 5).map(p => `«${p.name}»`).join(', ');
+    return list.length > 5 ? `${names} e mais ${list.length - 5}` : names;
+  };
+
+  async function bulkAction(action) {
+    const list = cache.products.filter(p => selected.has(p.sku));
+    if (!list.length) return;
+    const n = list.length;
+    const plural = n === 1 ? 'produto' : 'produtos';
+    if (action === 'delete') {
+      const ok = await confirmDialog({
+        title: `Eliminar ${n} ${plural}?`,
+        text: `${listNames(list)} ${n === 1 ? 'é apagado' : 'são apagados'} de vez, com as variantes de stock, e ${n === 1 ? 'retirado' : 'retirados'} dos looks. Esta ação não pode ser desfeita. Produtos que já foram encomendados não são eliminados (ficam selecionados para os poderes arquivar).`,
+        confirm: `Eliminar ${n}`, danger: true,
+      });
+      if (!ok) return;
+      bulkBusy = true; drawBulk();
+      const done = [];
+      const failed = [];
+      for (const [i, p] of list.entries()) {
+        $('bulk').querySelector('strong').textContent = `A eliminar ${i + 1} de ${n}…`;
+        const { error } = await client.rpc('admin_delete_product', { p_sku: p.sku });
+        if (error && ['PGRST202', '42883'].includes(error.code)) {
+          bulkBusy = false;
+          toast('Para eliminar produtos, executa primeiro supabase/product-delete.sql no Supabase.', true);
+          return refresh();
+        }
+        if (error) failed.push({ p, msg: errText(error) }); else { done.push(p); selected.delete(p.sku); }
+      }
+      bulkBusy = false;
+      cache.products = cache.products.filter(x => !done.some(d => d.sku === x.sku));
+      if (!failed.length) toast(`${done.length} ${done.length === 1 ? 'produto eliminado' : 'produtos eliminados'}.`);
+      else toast(`${done.length} eliminado(s). ${failed.length} não ${failed.length === 1 ? 'pôde' : 'puderam'} ser eliminado(s) e ${failed.length === 1 ? 'ficou selecionado' : 'ficaram selecionados'}: ${failed[0].msg}${failed.length > 1 ? ` (e mais ${failed.length - 1})` : ''}`, true);
+      return refresh();
+    }
+    const status = action;
+    if (status === 'archived') {
+      const ok = await confirmDialog({
+        title: `Arquivar ${n} ${plural}?`,
+        text: `${listNames(list)} deixam de aparecer na loja e não podem ser encomendados. As encomendas já feitas mantêm-se intactas.`,
+        confirm: `Arquivar ${n}`, danger: true,
+      });
+      if (!ok) return;
+    }
+    bulkBusy = true; drawBulk();
+    const { error } = await client.from('products').update({ status }).in('sku', list.map(p => p.sku));
+    bulkBusy = false;
+    if (error) { toast(errText(error), true); drawBulk(); return; }
+    selected.clear();
+    toast(`${n} ${status === 'archived' ? (n === 1 ? 'produto arquivado' : 'produtos arquivados') : (n === 1 ? 'produto publicado' : 'produtos publicados')}.`);
+    refresh();
   }
 
   content().addEventListener('click', async e => {
     if (current !== 'products') return;
+    const bulk = e.target.closest('[data-bulk]');
+    if (bulk) return bulkAction(bulk.dataset.bulk);
+    if (e.target.closest('[data-bulk-clear]')) { selected.clear(); return drawProducts(); }
+    if (e.target.closest('[data-select-filtered]')) { filteredProducts().forEach(p => selected.add(p.sku)); return drawProducts(); }
     const edit = e.target.closest('[data-edit]');
     if (edit) return productForm(cache.products.find(p => p.sku === edit.dataset.edit));
+    const del = e.target.closest('[data-delete]');
+    if (del) return deleteProduct(cache.products.find(p => p.sku === del.dataset.delete), del);
     const btn = e.target.closest('[data-publish],[data-archive],[data-restore]');
     if (!btn) return;
     const sku = btn.dataset.publish || btn.dataset.archive || btn.dataset.restore;
@@ -385,6 +539,30 @@
     toast(status === 'archived' ? 'Produto arquivado.' : status === 'published' ? 'Produto publicado.' : 'Produto restaurado como rascunho.');
     refresh();
   });
+
+  // Eliminar de vez: o servidor (admin_delete_product) recusa se estiver em encomendas
+  // ou se deixar um look publicado sem peças; senão retira-o dos looks e apaga-o.
+  async function deleteProduct(p, btn) {
+    const ok = await confirmDialog({
+      title: 'Eliminar produto?',
+      text: `«${p.name}» (${p.color_name}) é apagado de vez, com as variantes de stock, e retirado dos looks onde estiver. Esta ação não pode ser desfeita. Se já foi encomendado, não é possível: usa «Arquivar».`,
+      confirm: 'Eliminar', danger: true,
+    });
+    if (!ok) return;
+    btn.disabled = true;
+    const { data, error } = await client.rpc('admin_delete_product', { p_sku: p.sku });
+    if (error) {
+      btn.disabled = false;
+      toast(['PGRST202', '42883'].includes(error.code)
+        ? 'Para eliminar produtos, executa primeiro supabase/product-delete.sql no Supabase.' : errText(error), true);
+      return;
+    }
+    const looks = data?.looks || [];
+    toast(looks.length ? `Produto eliminado e retirado de: ${looks.join(', ')}.` : 'Produto eliminado.');
+    cache.products = cache.products.filter(x => x.sku !== p.sku);
+    selected.delete(p.sku);
+    refresh();
+  }
 
   function styleOptions(kind, value) {
     return STYLES[kind].map(([v, t]) => `<option value="${v}" ${v === (value ?? '') ? 'selected' : ''}>${esc(t)}</option>`).join('');
@@ -427,6 +605,10 @@
         <label>Acrescentar fotografias <input type="file" name="photos" accept="image/png,image/jpeg,image/webp" multiple>
           <span class="field-hint">PNG, JPEG ou WebP até 5 MB. A primeira é a principal. Máximo 8.</span></label>
       </fieldset>
+      <fieldset><legend>Tamanhos à venda</legend>
+        <div id="size-chips"></div>
+        <p class="field-hint" id="size-hint"></p>
+      </fieldset>
       <fieldset><legend>Variantes de cor e tamanho</legend>
         <p class="field-hint">Cada variante tem stock próprio. Sem variantes, o produto vende-se nos tamanhos padrão sem controlo de stock. Variantes não se apagam: desativa-as.</p>
         <div class="variant-row variant-head"><span>Cor</span><span></span><span>Tamanho</span><span>Stock</span><span></span></div>
@@ -464,7 +646,16 @@
           e.target.value = '';
           drawImages();
         };
-        form.elements.kind.onchange = e => { form.elements.style.innerHTML = styleOptions(e.target.value, null); };
+        const drawSizes = kind => {
+          $('size-chips').innerHTML = sizeChipsHtml(kind, kind === (p?.kind || 'top') ? activeSizes(p || { kind }) : DEFAULT_SIZES[kind]);
+          $('size-hint').textContent = !sizesSupported
+            ? 'Para escolher tamanhos (e criar acessórios), executa supabase/look-slots.sql no Supabase. Até lá vendem-se os tamanhos padrão.'
+            : kind === 'accessory' ? 'Acessórios vendem-se em tamanho único.'
+            : 'Só os tamanhos ativos aparecem na loja e podem ser encomendados. Com variantes de stock ativas, mandam as variantes.';
+          $('size-chips').querySelectorAll('input').forEach(i => { i.disabled = !sizesSupported; });
+        };
+        drawSizes(kind);
+        form.elements.kind.onchange = e => { form.elements.style.innerHTML = styleOptions(e.target.value, null); drawSizes(e.target.value); };
         $('add-variant').onclick = () => {
           $('variants').insertAdjacentHTML('beforeend', variantRow({}, form.elements.kind.value, { name: form.elements.color_name.value, hex: form.elements.color_hex.value }));
           $('variants').lastElementChild.querySelector('[name=v_size]').focus();
@@ -490,6 +681,10 @@
           invalid(form, 'price', 'Preço inválido: usa um valor entre 0,01 € e 10 000 €, com no máximo 2 casas decimais.');
         }
         if (images.length + newFiles.length > 8) throw Object.assign(new Error('Máximo de 8 fotografias por produto.'), { friendly: true });
+        const kindNow = isNew ? f.kind.value : p.kind;
+        if (kindNow === 'accessory' && !sizesSupported) throw Object.assign(new Error('Para criar acessórios, executa primeiro supabase/look-slots.sql no Supabase.'), { friendly: true });
+        const sizes = readChips($('size-chips'), kindNow);
+        if (sizesSupported && !sizes.length) throw Object.assign(new Error('Ativa pelo menos um tamanho à venda.'), { friendly: true });
 
         // Variantes
         const seen = new Set();
@@ -527,6 +722,7 @@
         const fields = {
           name, color_name: colorName, color_hex: f.color_hex.value, style: f.style.value || null,
           description: f.description.value.trim(), images, price: Number(priceText), status: f.status.value,
+          ...(sizesSupported ? { sizes } : {}),
         };
         let sku = p?.sku;
         if (isNew) {
@@ -802,9 +998,32 @@
     }
   });
 
+  /* ---------- Espaços do look: camisa, calça, sapato + produtos extra ---------- */
+  const SLOT_LABEL = { top: 'Camisa / parte de cima', pants: 'Calça / calções', shoes: 'Sapato / calçado', accessory: 'Acessório' };
+  let slotSeq = 0;
+  // Preço escrito num produto novo ("49,90" → 49.9); 0 se for inválido
+  const priceOf = c => { const t = String(c.price || '').trim().replace(/\s|€/g, '').replace(',', '.'); return /^\d{1,5}(\.\d{1,2})?$/.test(t) ? Number(t) : 0; };
+  const newSlot = (kind, product, fixed) => ({
+    uid: ++slotSeq, kind, fixed, sku: product?.sku || null,
+    sizes: product ? [...activeSizes(product)] : null, creating: null, q: '',
+  });
+  function slotsFromLook(l) {
+    const pieces = l ? lookPieces(l) : [];
+    const used = new Set();
+    const slots = ['top', 'pants', 'shoes'].map(kind => {
+      const p = pieces.find(x => x.kind === kind && !used.has(x.sku));
+      if (p) used.add(p.sku);
+      return newSlot(kind, p, true);
+    });
+    pieces.filter(p => !used.has(p.sku)).forEach(p => slots.push(newSlot(p.kind, p, false)));
+    return slots;
+  }
+
   function lookForm(l) {
     const isNew = !l;
-    let picked = l ? lookPieces(l).map(p => p.sku) : [];
+    let slots = slotsFromLook(l);
+    const slotOf = el => slots.find(x => x.uid === Number(el.closest('[data-slot]')?.dataset.slot));
+    const pickedSkus = () => slots.filter(x => x.sku).map(x => x.sku);
     let newFile = null;
     let transparencyWarning = '';
     const imageSrc = () => (newFile ? URL.createObjectURL(newFile) : l?.image_path ? publicUrl('looks', l.image_path) : null);
@@ -822,14 +1041,14 @@
         <label>Descrição curta <input type="text" name="description" value="${esc(l?.description)}" maxlength="200" placeholder="Malha macia, tons de terra."></label>
         <fieldset><legend>Imagem do modelo</legend>
           <label>Escolher imagem <input type="file" name="image" accept="image/png,image/webp">
-            <span class="field-hint">PNG ou WebP com fundo transparente, corpo inteiro, proporção ~2:5, até 5 MB.</span></label>
+            <span class="field-hint">PNG ou WebP com fundo transparente, corpo inteiro, proporção 2:3 (ex.: 1000 × 1500 px), até 5 MB.</span></label>
           <p class="form-status" id="image-warning"></p>
         </fieldset>
         <fieldset><legend>Produtos do look</legend>
-          <div class="picked" id="picked"></div>
+          <p class="field-hint">Escolhe uma peça do catálogo para cada espaço ou cria-a aqui. Ativa os tamanhos que tens para vender. Espaços vazios são ignorados.</p>
+          <div class="slots" id="slots"></div>
+          <button class="btn small" type="button" id="slot-add">+ Adicionar produto (óculos, relógio, colar…)</button>
           <div class="look-total"><span>Preço do conjunto</span><strong id="look-total">—</strong></div>
-          <label>Acrescentar produto <input type="search" id="picker-q" placeholder="Pesquisar no catálogo" autocomplete="off"></label>
-          <div class="picker-results" id="picker-results"></div>
         </fieldset>
       </div>
       <aside class="preview" aria-label="Pré-visualização">
@@ -848,53 +1067,139 @@
         : [{ label: 'Guardar rascunho', value: 'draft' }, { label: 'Guardar e publicar', value: 'publish', primary: true }],
       onReady: form => {
         const products = () => cache.products.filter(p => p.status !== 'archived');
+        const slotResults = slot => {
+          const q = norm(slot.q);
+          const taken = new Set(pickedSkus());
+          const list = products().filter(p => p.kind === slot.kind && !taken.has(p.sku)
+            && (!q || norm(`${p.name} ${p.color_name} ${p.sku}`).includes(q))).slice(0, 6);
+          return list.length ? list.map(p => `<div class="picker-item">
+              ${p.images?.[0] ? `<img class="thumb" src="${esc(p.images[0])}" alt="" style="width:28px;height:34px">` : `<span class="dot" style="background:${esc(p.color_hex || '#ccc')}"></span>`}
+              <span class="grow">${esc(p.name)}<small>${esc(p.color_name)} · ${money(p.price)}${p.status !== 'published' ? ' · rascunho' : ''}</small></span>
+              <button class="btn small" type="button" data-slot-pick="${esc(p.sku)}">Escolher</button></div>`).join('')
+            : `<span class="muted small">${q ? 'Nenhum produto encontrado.' : `Ainda não há produtos deste tipo no catálogo.`}</span>`;
+        };
+        const slotHtml = slot => {
+          const p = slot.sku ? productBySku(slot.sku) : null;
+          const head = `<div class="slot-head">
+              ${slot.fixed ? `<strong>${esc(SLOT_LABEL[slot.kind])}</strong>`
+                : `<select data-slot-kind aria-label="Tipo de produto">${Object.entries(KIND).filter(([k]) => k !== 'accessory' || sizesSupported || slot.kind === 'accessory')
+                    .map(([k, t]) => `<option value="${k}" ${k === slot.kind ? 'selected' : ''}>${esc(t)}</option>`).join('')}</select>`}
+              ${slot.fixed ? '' : '<button class="icon-btn" type="button" data-slot-remove aria-label="Retirar este espaço">✕</button>'}
+            </div>`;
+          let bodyHtml;
+          if (p) {
+            bodyHtml = `<div class="picked-item">
+                ${p.images?.[0] ? `<img class="thumb" src="${esc(p.images[0])}" alt="" style="width:32px;height:38px">` : `<span class="dot" style="background:${esc(p.color_hex || '#ccc')}"></span>`}
+                <span class="grow">${esc(p.name)}<small>${esc(p.color_name)} · ${money(p.price)}${p.status !== 'published' ? ' · <b>não publicado</b>' : ''}</small></span>
+                <button class="btn small" type="button" data-slot-clear>Trocar</button></div>
+              <div class="slot-sizes"><span class="muted small">Tamanhos à venda</span>
+                ${isTracked(p) ? '<span class="muted small">Geridos pelas variantes de stock (Produtos → editar).</span>'
+                  : sizesSupported ? sizeChipsHtml(p.kind, slot.sizes || activeSizes(p), 'data-slot-size')
+                  : '<span class="muted small">Tamanhos padrão (executa supabase/look-slots.sql para escolher).</span>'}</div>`;
+          } else if (slot.creating) {
+            const c = slot.creating;
+            bodyHtml = `<div class="slot-new">
+                <div class="grid-2">
+                  <label>Nome <input type="text" data-new="name" value="${esc(c.name)}" maxlength="80" placeholder="${slot.kind === 'accessory' ? 'Óculos de sol' : slot.kind === 'shoes' ? 'Mocassins' : slot.kind === 'pants' ? 'Calças de pinças' : 'Camisa Oxford'}"></label>
+                  <label>Preço (€) <input type="text" data-new="price" value="${esc(c.price)}" inputmode="decimal" placeholder="49,90"></label>
+                </div>
+                <div class="grid-3">
+                  <label>Cor <input type="text" data-new="color" value="${esc(c.color)}" maxlength="40" placeholder="Preto"></label>
+                  <label>Amostra <input type="color" data-new="hex" value="${esc(c.hex)}"></label>
+                  <label>${slot.kind === 'accessory' ? 'Tipo' : 'Forma (ícone)'} <select data-new="style">${styleOptions(slot.kind, c.style)}</select></label>
+                </div>
+                <label>Fotografia (opcional) <input type="file" data-new="file" accept="image/png,image/jpeg,image/webp">
+                  ${c.file ? `<span class="field-hint">${esc(c.file.name)}</span>` : ''}</label>
+                <div class="slot-sizes"><span class="muted small">Tamanhos à venda</span>${sizeChipsHtml(slot.kind, c.sizes, 'data-slot-size')}</div>
+                <div class="row-actions"><button class="btn small" type="button" data-slot-cancel>Cancelar</button>
+                  <span class="muted small">O produto é criado e publicado ao guardar o look.</span></div>
+              </div>`;
+          } else {
+            bodyHtml = `<div class="slot-pick">
+                <input type="search" data-slot-q value="${esc(slot.q)}" placeholder="Pesquisar no catálogo" autocomplete="off" aria-label="Pesquisar ${esc(SLOT_LABEL[slot.kind])}">
+                <div class="picker-results" data-slot-results>${slotResults(slot)}</div>
+                <button class="btn small" type="button" data-slot-new>+ Criar ${slot.kind === 'accessory' ? 'acessório' : 'produto'} novo</button>
+              </div>`;
+          }
+          return `<div class="slot ${p || slot.creating ? 'filled' : ''}" data-slot="${slot.uid}">${head}${bodyHtml}</div>`;
+        };
         const draw = () => {
-          const pieces = picked.map(productBySku).filter(Boolean);
-          $('picked').innerHTML = pieces.length ? pieces.map((p, i) => `<div class="picked-item">
-              ${p.images?.[0] ? `<img class="thumb" src="${esc(p.images[0])}" alt="" style="width:32px;height:38px">` : `<span class="dot" style="background:${esc(p.color_hex || '#ccc')}"></span>`}
-              <span class="grow">${esc(p.name)}<small>${esc(KIND[p.kind])} · ${esc(p.color_name)} · ${money(p.price)}${p.status !== 'published' ? ' · <b>não publicado</b>' : ''}</small></span>
-              <button class="icon-btn" type="button" data-pick-move="${i}" data-dir="-1" ${i === 0 ? 'disabled' : ''} aria-label="Subir">↑</button>
-              <button class="icon-btn" type="button" data-pick-move="${i}" data-dir="1" ${i === pieces.length - 1 ? 'disabled' : ''} aria-label="Descer">↓</button>
-              <button class="icon-btn" type="button" data-unpick="${esc(p.sku)}" aria-label="Retirar ${esc(p.name)}">✕</button></div>`).join('')
-            : '<span class="muted small">Ainda sem produtos. Pesquisa abaixo para acrescentar.</span>';
-          const total = lookPrice(pieces);
-          $('look-total').textContent = pieces.length ? money(total) : '—';
+          $('slots').innerHTML = slots.map(slotHtml).join('');
+          drawSummary();
+        };
+        const drawSummary = () => {
+          const pieces = pickedSkus().map(productBySku).filter(Boolean);
+          const creating = slots.filter(x => !x.sku && x.creating);
+          const count = pieces.length + creating.length;          const total = lookPrice(pieces) + creating.reduce((t, x) => t + priceOf(x.creating), 0);
+          $('look-total').textContent = count ? money(total) : '—';
           // pré-visualização
           const src = imageSrc();
           $('preview-stage').innerHTML = src ? `<img src="${esc(src)}" alt="">` : emptyHtml('Sem imagem', 'Carrega a imagem do modelo.');
           $('preview-cat').textContent = catName(form.elements.category_id.value);
           $('preview-name').textContent = form.elements.name.value.trim() || 'Sem nome';
           $('preview-desc').textContent = form.elements.description.value.trim();
-          $('preview-total').textContent = pieces.length ? `Conjunto completo · ${money(total)}` : '';
-          const publishedPieces = pieces.filter(p => p.status === 'published').length;
+          $('preview-total').textContent = count ? `Conjunto completo · ${money(total)}` : '';
+          const publishedPieces = pieces.filter(p => p.status === 'published').length + creating.length;
           $('preview-check').innerHTML = `<li class="${src ? 'ok' : ''}">Imagem do modelo</li>
             <li class="${publishedPieces ? 'ok' : ''}">Pelo menos um produto publicado</li>
-            ${pieces.length > publishedPieces ? `<li>${pieces.length - publishedPieces} produto(s) em rascunho não aparecem na loja</li>` : ''}`;
-          drawResults();
-        };
-        const drawResults = () => {
-          const q = norm($('picker-q').value);
-          const list = products().filter(p => !picked.includes(p.sku) && (!q || norm(`${p.name} ${p.color_name} ${p.sku}`).includes(q))).slice(0, 8);
-          $('picker-results').innerHTML = !q && !list.length ? '' : list.length ? list.map(p => `<div class="picker-item">
-              <span class="dot" style="background:${esc(p.color_hex || '#ccc')}"></span>
-              <span class="grow">${esc(p.name)}<small>${esc(p.color_name)} · ${money(p.price)}${p.status !== 'published' ? ' · rascunho' : ''}</small></span>
-              <button class="btn small" type="button" data-pick="${esc(p.sku)}">Acrescentar</button></div>`).join('')
-            : '<span class="muted small">Nenhum produto encontrado.</span>';
+            ${count > publishedPieces ? `<li>${count - publishedPieces} produto(s) em rascunho não aparecem na loja</li>` : ''}`;
         };
         draw();
-        $('picker-q').oninput = drawResults;
-        $('picker-q').onkeydown = e => { if (e.key === 'Enter') e.preventDefault(); };
-        form.oninput = e => { if (['name', 'description'].includes(e.target.name)) draw(); };
-        form.elements.category_id.onchange = draw;
-        $('drawer-body').onclick = e => {
-          const add = e.target.closest('[data-pick]');
-          const rm = e.target.closest('[data-unpick]');
-          const mv = e.target.closest('[data-pick-move]');
-          if (add) { if (picked.length >= 20) { setDrawerStatus('Máximo de 20 produtos por look.'); return; } picked.push(add.dataset.pick); }
-          if (rm) picked = picked.filter(s => s !== rm.dataset.unpick);
-          if (mv) { const i = Number(mv.dataset.pickMove); const j = i + Number(mv.dataset.dir); [picked[i], picked[j]] = [picked[j], picked[i]]; }
-          if (add || rm || mv) draw();
+        $('slot-add').onclick = () => {
+          if (slots.length >= 20) { setDrawerStatus('Máximo de 20 produtos por look.'); return; }
+          slots.push(newSlot(sizesSupported ? 'accessory' : 'top', null, false));
+          draw();
+          $('slots').lastElementChild.querySelector('[data-slot-q]')?.focus();
         };
+        $('slots').addEventListener('input', e => {
+          const slot = slotOf(e.target);
+          if (!slot) return;
+          if (e.target.matches('[data-slot-q]')) {
+            slot.q = e.target.value;
+            e.target.closest('[data-slot]').querySelector('[data-slot-results]').innerHTML = slotResults(slot);
+          } else if (e.target.dataset.new && e.target.dataset.new !== 'file') {
+            slot.creating[e.target.dataset.new] = e.target.value;
+            if (e.target.dataset.new === 'price') drawSummary();
+          }
+        });
+        $('slots').addEventListener('keydown', e => { if (e.key === 'Enter' && e.target.matches('[data-slot-q], [data-new]')) e.preventDefault(); });
+        $('slots').addEventListener('change', e => {
+          const slot = slotOf(e.target);
+          if (!slot) return;
+          if (e.target.matches('[data-slot-kind]')) {
+            slot.kind = e.target.value; slot.sku = null; slot.sizes = null; slot.creating = null; slot.q = '';
+            draw();
+          } else if (e.target.matches('[data-slot-size]')) {
+            const sizes = readChips(e.target.closest('.slot-sizes'), slot.kind);
+            if (slot.creating) slot.creating.sizes = sizes; else slot.sizes = sizes;
+          } else if (e.target.dataset.new === 'file') {
+            const file = e.target.files[0];
+            const bad = file && checkImage('catalog', file);
+            if (bad) { setDrawerStatus(bad); e.target.value = ''; return; }
+            setDrawerStatus('');
+            slot.creating.file = file || null;
+          }
+        });
+        $('slots').addEventListener('click', e => {
+          const slot = slotOf(e.target);
+          if (!slot) return;
+          if (e.target.closest('[data-slot-pick]')) {
+            const p = productBySku(e.target.closest('[data-slot-pick]').dataset.slotPick);
+            slot.sku = p.sku; slot.sizes = [...activeSizes(p)]; slot.q = '';
+          } else if (e.target.closest('[data-slot-clear]')) {
+            slot.sku = null; slot.sizes = null;
+          } else if (e.target.closest('[data-slot-new]')) {
+            slot.creating = { name: '', price: '', color: '', hex: '#9aa0a6', style: STYLES[slot.kind][0][0], file: null, sizes: [...DEFAULT_SIZES[slot.kind]] };
+          } else if (e.target.closest('[data-slot-cancel]')) {
+            slot.creating = null;
+          } else if (e.target.closest('[data-slot-remove]')) {
+            slots = slots.filter(x => x !== slot);
+          } else return;
+          draw();
+          if (slot.creating) $('slots').querySelector(`[data-slot="${slot.uid}"] [data-new="name"]`)?.focus();
+        });
+        form.oninput = e =>        form.oninput = e => { if (['name', 'description'].includes(e.target.name)) drawSummary(); };
+        form.elements.category_id.onchange = drawSummary;
         form.elements.image.onchange = async e => {
           const file = e.target.files[0];
           e.target.value = '';
@@ -906,7 +1211,7 @@
           transparencyWarning = (await hasTransparency(file)) ? '' : 'Esta imagem não parece ter fundo transparente: no carrossel vai aparecer um retângulo à volta do modelo.';
           warn.textContent = transparencyWarning;
           warn.dataset.tone = 'warn';
-          draw();
+          drawSummary();
         };
       },
       onSubmit: async (action, form) => {
@@ -914,11 +1219,55 @@
         const name = f.name.value.trim().replace(/\s+/g, ' ');
         if (!name) invalid(form, 'name', 'Indica o nome do look.');
         if (!f.category_id.value) invalid(form, 'category_id', 'Escolhe uma categoria.');
+        const friendly = text => Object.assign(new Error(text), { friendly: true });
+        const focusSlot = (slot, sel) => { const el = $('slots').querySelector(`[data-slot="${slot.uid}"] ${sel}`); el?.setAttribute('aria-invalid', 'true'); el?.focus(); };
+        // Produtos novos: validar tudo antes de gravar
+        const toCreate = slots.filter(x => !x.sku && x.creating);
+        for (const slot of toCreate) {
+          const c = slot.creating;
+          const label = SLOT_LABEL[slot.kind].toLowerCase();
+          if (!c.name.trim()) { focusSlot(slot, '[data-new="name"]'); throw friendly(`Indica o nome do novo produto (${label}).`); }
+          if (!priceOf(c) || priceOf(c) > 10000) { focusSlot(slot, '[data-new="price"]'); throw friendly(`Preço inválido em «${c.name.trim()}»: usa um valor entre 0,01 € e 10 000 €.`); }
+          if (!c.color.trim()) { focusSlot(slot, '[data-new="color"]'); throw friendly(`Indica a cor de «${c.name.trim()}».`); }
+          if (sizesSupported && !c.sizes.length) throw friendly(`Ativa pelo menos um tamanho para «${c.name.trim()}».`);
+          if (slot.kind === 'accessory' && !sizesSupported) throw friendly('Para criar acessórios, executa primeiro supabase/look-slots.sql no Supabase.');
+        }
+        for (const slot of slots.filter(x => x.sku && x.sizes && sizesSupported && !isTracked(productBySku(x.sku)))) {
+          if (!slot.sizes.length) throw friendly(`Ativa pelo menos um tamanho para «${productBySku(slot.sku).name}».`);
+        }
         const wantsPublished = action === 'publish' || (action === 'keep' && l?.status === 'published');
         if (wantsPublished) {
-          if (!newFile && !l?.image_path) throw Object.assign(new Error('Para publicar, carrega a imagem do modelo.'), { friendly: true });
-          if (!picked.some(sku => productBySku(sku)?.status === 'published')) throw Object.assign(new Error('Para publicar, associa pelo menos um produto publicado.'), { friendly: true });
+          if (!newFile && !l?.image_path) throw friendly('Para publicar, carrega a imagem do modelo.');
+          if (!toCreate.length && !pickedSkus().some(sku => productBySku(sku)?.status === 'published')) throw friendly('Para publicar, associa pelo menos um produto publicado.');
         }
+
+        // 1. Cria os produtos novos (publicados) e grava os tamanhos alterados
+        for (const slot of toCreate) {
+          const c = slot.creating;
+          const name = c.name.trim().replace(/\s+/g, ' ');
+          let images = [];
+          if (c.file) {
+            setDrawerStatus(`A carregar a fotografia de «${name}»…`, 'warn');
+            images = [publicUrl('catalog', await uploadImage('catalog', c.file, 'products'))];
+          }
+          setDrawerStatus(`A criar «${name}»…`, 'warn');
+          const slug = norm(name).replace(/[^a-z0-9]+(.)?/g, (_, ch) => (ch ? ch.toUpperCase() : '')).slice(0, 24) || 'produto';
+          const sku = `${slot.kind}:${slug}${Date.now().toString(36).slice(-4)}${slot.uid}`;
+          const row = check(await client.from('products').insert({
+            sku, kind: slot.kind, name, color_name: c.color.trim(), color_hex: c.hex, style: c.style || null,
+            description: '', images, price: priceOf(c), status: 'published', ...(sizesSupported ? { sizes: c.sizes } : {}),
+          }).select('sku, kind, name, color_name, color_hex, style, images, price, status').single());
+          cache.products.push({ ...row, sizes: c.sizes, product_variants: [] });
+          slot.sku = sku; slot.sizes = c.sizes; slot.creating = null;
+        }
+        for (const slot of slots.filter(x => x.sku && x.sizes && sizesSupported)) {
+          const p = productBySku(slot.sku);
+          if (isTracked(p) || sameList(slot.sizes, activeSizes(p))) continue;
+          check(await client.from('products').update({ sizes: slot.sizes }).eq('sku', p.sku));
+          p.sizes = slot.sizes;
+        }
+        setDrawerStatus('');
+        const picked = [...new Set(pickedSkus())];
         let imagePath = l?.image_path || null;
         if (newFile) {
           setDrawerStatus('A carregar a imagem…', 'warn');
@@ -947,6 +1296,7 @@
         if (action === 'publish') check(await client.from('looks').update({ status: 'published' }).eq('id', id));
         closeDrawer();
         toast(action === 'publish' ? 'Look publicado na loja.' : 'Look guardado.');
+        await loadProducts(true).catch(() => {});
         refresh();
       },
     });

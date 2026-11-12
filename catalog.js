@@ -20,8 +20,11 @@
   const params = new URLSearchParams(location.search);
   const previewId = /^[0-9a-f-]{36}$/i.test(params.get('preview') || '') ? params.get('preview') : null;
 
-  const LOOK_FIELDS = 'id, name, description, category_id, image_path, position, status, ' +
-    'look_products(position, products(sku, kind, style, name, color_name, color_hex, price, images, status))';
+  // `sizes` (tamanhos à venda) só existe depois de supabase/look-slots.sql; sem ela, tamanhos padrão
+  let withSizes = true;
+  const lookFields = () => 'id, name, description, category_id, image_path, position, status, ' +
+    `look_products(position, products(sku, kind, style, name, color_name, color_hex, price, images, status${withSizes ? ', sizes' : ''}))`;
+  const missingSizes = e => e && (e.code === '42703' || /sizes/.test(e.message || ''));
 
   const toPiece = p => ({
     sku: p.sku,
@@ -32,6 +35,7 @@
     color: p.color_hex || '#9aa0a6',
     price: Number(p.price),
     image: (p.images || [])[0] || null,
+    sizes: Array.isArray(p.sizes) ? p.sizes : [],
   });
 
   const toLook = (row, preview = false) => ({
@@ -50,17 +54,19 @@
 
   try {
     await client.auth.getSession();   // garante que a sessão (se houver) já foi restaurada
-    const [cats, looks] = await Promise.all([
+    const loadLooks = () => client.from('looks').select(lookFields()).eq('status', 'published').order('position');
+    let [cats, looks] = await Promise.all([
       client.from('categories').select('id, name, description, position, visible').order('position'),
-      client.from('looks').select(LOOK_FIELDS).eq('status', 'published').order('position'),
+      loadLooks(),
     ]);
+    if (missingSizes(looks.error)) { withSizes = false; looks = await loadLooks(); }
     if (cats.error) throw cats.error;
     if (looks.error) throw looks.error;
 
     let rows = looks.data.map(r => toLook(r));
     let previewName = null;
     if (previewId) {
-      const { data } = await client.from('looks').select(LOOK_FIELDS).eq('id', previewId).maybeSingle();
+      const { data } = await client.from('looks').select(lookFields()).eq('id', previewId).maybeSingle();
       if (data) {
         rows = rows.filter(r => r.id !== previewId);
         const look = toLook(data, true);

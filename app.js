@@ -43,9 +43,17 @@ function icon(piece) {
     shorts: 'M12 12H48L53 48H34L30 28L26 48H7Z',
     shoes: 'M5 46Q6 32 18 32L30 36Q42 40 52 42Q58 44 57 52H5Z',
     sandal: 'M5 46Q6 42 16 42H46Q57 42 56 50H5ZM16 42L22 34H30L26 42ZM34 42L38 34H46L42 42Z',
+    glasses: 'M4 30H56V34H52Q51 46 40 46Q31 46 30 36Q29 46 20 46Q9 46 8 34H4Z',
+    watch: 'M22 6H38L40 20Q48 26 48 35Q48 44 40 50L38 64H22L20 50Q12 44 12 35Q12 26 20 20Z',
+    necklace: 'M10 8Q30 52 50 8L54 10Q32 62 6 10ZM26 46H34V58H26Z',
+    hat: 'M14 40Q14 14 30 14Q46 14 46 40H58V48H2V40Z',
+    bag: 'M10 26H50L54 64H6ZM20 26Q20 8 30 8Q40 8 40 26H35Q35 13 30 13Q25 13 25 26Z',
+    belt: 'M2 28H58V40H2ZM24 25H38V43H24Z',
+    accessory: 'M30 6L37 23L55 24L41 36L46 54L30 44L14 54L19 36L5 24L23 23Z',
   };
   const key = piece.kind === 'top' ? piece.style
     : piece.kind === 'pants' ? (isShorts(piece) ? 'shorts' : 'pants')
+    : piece.kind === 'accessory' ? (piece.style in ACCESSORY_LABEL ? piece.style : 'accessory')
     : piece.style === 'sandal' ? 'sandal' : 'shoes';
   const d = paths[key] || paths[piece.kind === 'top' ? 'tee' : piece.kind] || paths.tee;
   return `<svg viewBox="0 0 60 70" aria-hidden="true">
@@ -61,13 +69,22 @@ const pieceThumb = piece => (piece.image
 
 /* Posição dos pontos (em % da figura) */
 const PIN_POSITIONS = { top: [50, 30], pants: [60, 70], shoes: [63, 94] };
+// Acessórios: o ponto fica onde a peça costuma estar numa fotografia de corpo inteiro, de frente
+const ACCESSORY_PINS = { glasses: [50, 8], hat: [50, 3], necklace: [50, 19], watch: [68, 46], bag: [76, 52], belt: [50, 42], other: [72, 38] };
+const ACCESSORY_LABEL = { glasses: 'Óculos', watch: 'Relógio', necklace: 'Colar', hat: 'Chapéu', bag: 'Mala', belt: 'Cinto', other: 'Acessório' };
 const isShorts = piece => piece.style === 'shorts' || piece.style === 'runshorts';
 const pinPosition = piece =>
-  piece.kind === 'pants' && isShorts(piece) ? [60, piece.style === 'runshorts' ? 56 : 59] : PIN_POSITIONS[piece.kind];
+  piece.kind === 'accessory' ? (ACCESSORY_PINS[piece.style] || ACCESSORY_PINS.other)
+  : piece.kind === 'pants' && isShorts(piece) ? [60, piece.style === 'runshorts' ? 56 : 59] : PIN_POSITIONS[piece.kind];
 
-const KIND_LABEL = { top: 'Parte de cima', pants: 'Calças', shoes: 'Calçado' };
-const kindLabel = piece => (piece.kind === 'pants' && isShorts(piece) ? 'Calções' : KIND_LABEL[piece.kind]);
-const sizesFor = piece => (piece.kind === 'shoes' ? SHOE_SIZES : SIZES);
+const KIND_LABEL = { top: 'Parte de cima', pants: 'Calças', shoes: 'Calçado', accessory: 'Acessório' };
+const kindLabel = piece => (piece.kind === 'pants' && isShorts(piece) ? 'Calções'
+  : piece.kind === 'accessory' ? (ACCESSORY_LABEL[piece.style] || 'Acessório') : KIND_LABEL[piece.kind]);
+// Tamanhos à venda: os ativados no painel; sem lista, os padrão do tipo. Acessórios: tamanho único ('U').
+const sizesFor = piece => (piece.sizes?.length ? piece.sizes
+  : piece.kind === 'shoes' ? SHOE_SIZES : piece.kind === 'accessory' ? ['U'] : SIZES);
+const sizeText = size => (size === 'U' ? 'Único' : size);
+const clothes = piece => piece.kind === 'top' || piece.kind === 'pants';
 
 /* =========================================================
    Estado
@@ -145,14 +162,16 @@ function orbitOffset(i, rot) {
 
 function placeModels() {
   const n = view.length;
-  const slots = ORBIT.slots;  // espaçamento fixo na elipse, seja qual for o número de looks
-  // Até onde se mostram modelos: 4,5 posições para cada lado, ou menos se a categoria for pequena
-  // (o modelo que dá a volta, em ±n/2, desaparece em vez de saltar).
-  const reach = Math.min(slots / 2 - 0.5, n / 2);
+  // Até ORBIT.slots looks: anel completo — todos repartidos pela volta inteira (360°),
+  // sem princípio nem fim. Com mais: 10 posições visíveis; os restantes esperam escondidos
+  // atrás e entram/saem em fade.
+  const closed = n <= ORBIT.slots;
+  const slots = closed ? Math.max(n, 1) : ORBIT.slots;
+  const reach = slots / 2 - 0.5;
   modelEls.forEach((el, i) => {
     const off = orbitOffset(i, rotation);
     // Fora da órbita visível: fica escondido (sem custo de desenho).
-    const fade = n > 1 ? clamp01(reach - Math.abs(off)) : 1;
+    const fade = closed ? 1 : clamp01(reach - Math.abs(off));
     if (fade <= 0) {
       el.style.visibility = 'hidden';
       return;
@@ -259,9 +278,9 @@ function renderPanel() {
   $('look-title').textContent = look.name;
   $('look-mood').textContent = look.mood;
   $('look-number').textContent = pad(active + 1);
-  // Só pede o tamanho/número que o conjunto precisa
-  $('size').closest('label').hidden = !look.pieces.some(p => p.kind !== 'shoes');
-  $('shoe').closest('label').hidden = !look.pieces.some(p => p.kind === 'shoes');
+  // Só pede o tamanho/número que o conjunto precisa, com os tamanhos à venda em todas as peças
+  fillSizes($('size'), look.pieces.filter(clothes), SIZES);
+  fillSizes($('shoe'), look.pieces.filter(p => p.kind === 'shoes'), SHOE_SIZES);
   $('products').innerHTML = look.pieces.map((p, i) => `
     <button type="button" class="product" data-piece="${i}">
       <span class="swatch">${pieceThumb(p)}</span>
@@ -269,6 +288,21 @@ function renderPanel() {
       <strong>${money(p.price)}</strong>
     </button>`).join('');
   $('total').textContent = money(lookTotal(look));
+}
+
+// Opções do seletor: tamanhos disponíveis em TODAS as peças desse tipo (o conjunto vende-se num só tamanho)
+function fillSizes(select, pieces, order) {
+  select.closest('label').hidden = !pieces.length;
+  if (!pieces.length) return;
+  const common = pieces.map(sizesFor).reduce((a, b) => a.filter(x => b.includes(x)));
+  const rank = x => (order.indexOf(x) + 1) || 99;
+  const sizes = [...common].sort((a, b) => rank(a) - rank(b));
+  const keep = sizes.includes(select.value) ? select.value : '';
+  const placeholder = select.options[0].textContent;
+  select.innerHTML = `<option value="">${placeholder}</option>` + sizes.map(s => `<option>${escAttr(s)}</option>`).join('');
+  select.value = keep;
+  select.disabled = !sizes.length;
+  if (!sizes.length) select.options[0].textContent = 'Sem tamanho comum';
 }
 
 function highlightPiece(index) {
@@ -289,7 +323,7 @@ function renderPiece(index) {
   const piece = look.pieces[index];
   const sizes = sizesFor(piece);
   // Pré-seleciona o tamanho já escolhido no painel, se houver.
-  const preset = piece.kind === 'shoes' ? $('shoe').value : $('size').value;
+  const preset = sizes.length === 1 ? sizes[0] : piece.kind === 'shoes' ? $('shoe').value : $('size').value;
 
   $('piece').dataset.piece = index;
   $('piece-zoom').innerHTML = `<img src="${escAttr(piece.image || look.image)}" alt="">`;
@@ -302,8 +336,8 @@ function renderPiece(index) {
   $('piece-price').textContent = money(piece.price);
   $('piece-size-label').textContent = piece.kind === 'shoes' ? 'Número' : 'Tamanho';
   $('piece-sizes').innerHTML = sizes.map(s => `
-    <button type="button" class="size-chip${s === preset ? ' selected' : ''}" data-size="${s}"
-      aria-pressed="${s === preset}">${s}</button>`).join('');
+    <button type="button" class="size-chip${s === preset ? ' selected' : ''}" data-size="${escAttr(s)}"
+      aria-pressed="${s === preset}">${escAttr(sizeText(s))}</button>`).join('');
   $('piece-status').textContent = '';
   $('piece-others').innerHTML = look.pieces.map((p, i) => `
     <button type="button" class="piece-thumb${i === index ? ' active' : ''}" data-goto="${i}"
@@ -526,7 +560,7 @@ function updateBag() {
         const sizeLabel = piece.kind === 'shoes' ? 'Número' : 'Tamanho';
         return `<div class="cart-row">
           <span class="cart-thumb">${pieceThumb(piece)}</span>
-          <span class="cart-info">${piece.name}<br><small>${piece.detail} · ${sizeLabel} ${x.size} · ${money(piece.price)}</small></span>
+          <span class="cart-info">${piece.name}<br><small>${piece.detail} · ${sizeLabel} ${sizeText(x.size)} · ${money(piece.price)}</small></span>
           <button type="button" data-remove="${i}">Remover</button>
         </div>`;
       }
@@ -701,8 +735,11 @@ $('models').addEventListener('wheel', e => {
 $('add').addEventListener('click', () => {
   const look = currentLook();
   if (!look) return;
-  const needsSize = look.pieces.some(p => p.kind !== 'shoes');
+  const needsSize = look.pieces.some(clothes);
   const needsShoe = look.pieces.some(p => p.kind === 'shoes');
+  if ((needsSize && $('size').disabled) || (needsShoe && $('shoe').disabled)) {
+    message('As peças deste look não têm um tamanho em comum: compra-as em separado.'); return;
+  }
   if (needsSize && !$('size').value) { message('Escolhe primeiro o tamanho da roupa.'); $('size').focus(); return; }
   if (needsShoe && !$('shoe').value) { message('Escolhe o número do calçado.'); $('shoe').focus(); return; }
   bag.push({ ...lookRef(), size: needsSize ? $('size').value : '', shoe: needsShoe ? $('shoe').value : '' });

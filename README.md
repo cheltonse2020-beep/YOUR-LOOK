@@ -25,8 +25,7 @@ Não precisa de npm nem de compilação.
 - `supabase/test-rls.sql` — teste de isolamento entre dois utilizadores (corre e faz rollback).
 - `supabase/verify-auth.mjs` — verificação real, pela API, com duas contas de teste.
 - `supabase/orders.sql` — catálogo de preços, encomendas, linhas, RLS e função `place_order`.
-- `supabase/products.sql` — 68 produtos de demonstração (usados pelos testes SQL).
-- `supabase/archive-demo-products.sql` — esconde (arquiva, sem apagar) esses produtos de demonstração.
+- `supabase/delete-demo-products.sql` — elimina os antigos produtos de demonstração (mantém os que estão em looks; arquiva os que estão em encomendas).
 - `supabase/test-orders.sql` — teste das encomendas (preços no servidor, validação, isolamento; faz rollback).
 - `supabase/payments.sql` — campos de pagamento Stripe nas encomendas.
 - `supabase/functions/create-checkout` — Edge Function que cria o pagamento Stripe de uma encomenda do cliente.
@@ -35,6 +34,8 @@ Não precisa de npm nem de compilação.
 
 ## Os looks (modelos)
 A loja já não traz looks de demonstração: o carrossel mostra **só os looks publicados no painel** (`/admin/` → *Looks e carrossel*). Enquanto não houver nenhum, aparece "Coleção em preparação"; numa categoria sem looks, "Ainda sem looks nesta categoria".
+
+No formulário do look há um espaço para cada peça — **Camisa**, **Calça** e **Sapato** — e o botão **+ Adicionar produto** para óculos, relógio, colar, chapéu, mala ou cinto. Em cada espaço escolhes uma peça do catálogo ou crias uma nova (nome, preço, cor, fotografia) e **ativas os tamanhos que tens para vender**. A loja só mostra esses tamanhos e o servidor recusa os outros. Acessórios vendem-se em tamanho único. No conjunto completo, o cliente escolhe entre os tamanhos comuns a todas as peças.
 
 Para adicionar um modelo real:
 1. **Produtos** → criar cada peça (nome, tipo, cor, preço, fotografia, tamanhos/stock) e publicá-la.
@@ -113,8 +114,7 @@ Segurança:
 
 Configurar (SQL Editor, por esta ordem, depois de `schema.sql`):
 1. `supabase/orders.sql`
-2. `supabase/products.sql` (produtos de demonstração, usados pelo teste)
-3. `supabase/test-orders.sql` → deve terminar com `OK: todos os testes de encomendas passaram`.
+2. `supabase/test-orders.sql` → deve terminar com `OK: todos os testes de encomendas passaram`.
 
 Os preços oficiais são os da tabela `products`, geridos no painel (*Produtos*).
 
@@ -161,10 +161,11 @@ Segurança — tudo é validado no Supabase, não no browser:
 Na loja, o carrossel circular mostra os looks publicados, pela ordem definida no painel. `index.html?preview=<id>` mostra um rascunho só a administradores.
 
 ### Configurar
-1. **SQL Editor**: executar `supabase/admin.sql` (depois de `schema.sql`, `orders.sql`, `products.sql`, `payments.sql`). Só acrescenta; não apaga dados.
-2. Executar de novo `supabase/products.sql` (preenche cor/forma dos ícones; não altera preços nem estados).
+1. **SQL Editor**: executar `supabase/admin.sql` (depois de `schema.sql`, `orders.sql`, `payments.sql`). Só acrescenta; não apaga dados.
 3. **SQL Editor**: `supabase/test-admin.sql` → `OK: todos os testes de administração passaram`.
-3b. **Só depois dos testes**: `supabase/archive-demo-products.sql` esconde os 68 produtos de demonstração (arquiva-os; nada é apagado e as encomendas antigas ficam intactas). Os testes SQL usam esses produtos, por isso correm antes.
+3a. **SQL Editor**: `supabase/look-slots.sql` (acessórios e tamanhos à venda por produto) e depois `supabase/test-look-slots.sql` → `OK: acessórios e tamanhos à venda funcionam`.
+3c. **SQL Editor**: `supabase/product-delete.sql` (botão **Eliminar** em Produtos) e depois `supabase/test-product-delete.sql` → `OK: eliminação de produtos protegida`. Eliminar é definitivo e pede confirmação; o servidor recusa produtos que já estão em encomendas (usa «Arquivar») e não deixa um look publicado sem peças.
+3b. `supabase/delete-demo-products.sql` elimina os produtos de demonstração antigos. Os que estão em looks ficam (troca-os no painel e volta a executá-lo); os que estão em encomendas são arquivados, para as encomendas continuarem completas. Os testes SQL criam os seus próprios produtos e não dependem destes.
 4. **Primeiro administrador**: regista a conta na loja e confirma o email; depois abre `supabase/first-admin.sql`, substitui o email na linha `v_email` e executa-o no SQL Editor. O email só serve para encontrar a conta: a permissão fica no **ID do utilizador** (`profiles.is_admin`). O script recusa contas inexistentes ou por confirmar, só altera essa linha e lista os administradores no fim. Para retirar: `update public.profiles set is_admin = false where id = '<user_id>';`.
 5. Se já tinhas publicado a função `stripe-webhook`, publica de novo a versão atual (também grava `payment_status`). A versão antiga continua a funcionar graças a um trigger de compatibilidade.
 

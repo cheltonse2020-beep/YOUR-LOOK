@@ -1,10 +1,17 @@
 -- =====================================================================
--- FORMA — teste do painel de administração (permissões, stock, looks, envios)
+-- YOUR LOOK — teste do painel de administração (permissões, stock, looks, envios)
 -- Executar no SQL Editor DEPOIS de admin.sql. Corre numa transação e faz
 -- ROLLBACK no fim: não deixa dados. Resultado esperado:
 --   "OK: todos os testes de administração passaram"
 -- =====================================================================
 begin;
+
+-- Produtos próprios do teste (desaparecem no ROLLBACK): o teste não depende do catálogo da loja
+insert into public.products (sku, kind, name, color_name, price, active) values
+  ('top:testeSweat',   'top',   'Sweatshirt Teste', 'Cinzento', 44.90, true),
+  ('top:testeTee',     'top',   'T-shirt Teste',    'Branco',   24.90, true),
+  ('pants:testeJeans', 'pants', 'Jeans Teste',      'Azul',     59.90, true),
+  ('shoes:testeCourt', 'shoes', 'Sapatilhas Teste', 'Branco',   69.90, true);
 
 insert into auth.users (id, email, raw_user_meta_data, aud, role) values
   ('00000000-0000-4000-8000-0000000000a1', 'admin.teste@example.invalid',   '{"full_name":"Admin Teste"}',   'authenticated', 'authenticated'),
@@ -43,12 +50,12 @@ begin
   begin insert into public.products (sku, kind, name, color_name, price) values ('top:hack1', 'top', 'X', 'Preto', 1);
         raise exception 'FALHOU: cliente criou produto'; exception when insufficient_privilege then null; end;
 
-  update public.products set price = 0.01 where sku = 'top:greySweat';
+  update public.products set price = 0.01 where sku = 'top:testeSweat';
   get diagnostics n = row_count;
   assert n = 0, 'FALHOU: cliente alterou o preço de um produto';
-  assert (select price from public.products where sku = 'top:greySweat') = 44.90, 'FALHOU: preço alterado';
+  assert (select price from public.products where sku = 'top:testeSweat') = 44.90, 'FALHOU: preço alterado';
 
-  begin update public.products set sku = 'top:outro' where sku = 'top:greySweat';
+  begin update public.products set sku = 'top:outro' where sku = 'top:testeSweat';
         raise exception 'FALHOU: cliente alterou SKU'; exception when insufficient_privilege then null; end;
 
   begin insert into public.categories (id, name) values ('hack', 'Hack');
@@ -59,7 +66,7 @@ begin
 
   begin insert into public.looks (name, category_id) values ('Hack', 'gym');
         raise exception 'FALHOU: cliente criou look'; exception when insufficient_privilege then null; end;
-  begin insert into public.product_variants (product_sku, color_name, size, stock) values ('top:greySweat', 'Cinzento', 'M', 99);
+  begin insert into public.product_variants (product_sku, color_name, size, stock) values ('top:testeSweat', 'Cinzento', 'M', 99);
         raise exception 'FALHOU: cliente criou variante'; exception when insufficient_privilege then null; end;
 
   begin perform public.admin_overview();
@@ -112,7 +119,7 @@ begin
         if sqlerrm like 'FALHOU%' then raise; end if; end;
   update public.products set status = 'published' where sku = 'top:testeAdmin';
   assert (select active from public.products where sku = 'top:testeAdmin'), 'FALHOU: active não segue o estado';
-  insert into public.look_products (look_id, product_sku, position) values (v_look, 'pants:midJeans', 1);
+  insert into public.look_products (look_id, product_sku, position) values (v_look, 'pants:testeJeans', 1);
   update public.looks set status = 'published' where id = v_look;
   assert (select published_at is not null from public.looks where id = v_look), 'FALHOU: published_at';
 
@@ -167,7 +174,7 @@ begin
 
   r := public.place_order('[{"sku":"top:testeAdmin","size":"M","qty":2}]', ship);
   perform set_config('forma.order_a', r ->> 'id', true);
-  r := public.place_order('[{"sku":"pants:midJeans","size":"M","qty":1}]', ship);   -- sem variantes: sem controlo de stock
+  r := public.place_order('[{"sku":"pants:testeJeans","size":"M","qty":1}]', ship);   -- sem variantes: sem controlo de stock
   perform set_config('forma.order_b', r ->> 'id', true);
 end $$;
 

@@ -1,6 +1,6 @@
 -- =====================================================================
 -- FORMA / Your Look — painel de administração (migração)
--- Executar no SQL Editor DEPOIS de: schema.sql, orders.sql, products.sql, payments.sql.
+-- Executar no SQL Editor DEPOIS de: schema.sql, orders.sql, payments.sql.
 -- Só acrescenta: não apaga tabelas, colunas nem dados. Pode ser executado várias vezes.
 --
 -- Autorização: public.profiles.is_admin (já existente). O utilizador não o pode

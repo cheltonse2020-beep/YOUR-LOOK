@@ -1,6 +1,6 @@
 -- =====================================================================
 -- FORMA — encomendas (Supabase)
--- Executar no SQL Editor DEPOIS de schema.sql, e depois products.sql.
+-- Executar no SQL Editor DEPOIS de schema.sql.
 --
 -- Segurança:
 -- - Os preços vêm SEMPRE da tabela products (servidor). O browser só envia

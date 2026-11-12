@@ -237,3 +237,33 @@ td.actions .btn + .btn { margin-left: 6px; }
   .card .value { font-size: 21px; }
 }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
+
+/* ---------- Look: espaços por peça e tamanhos à venda ---------- */
+.slots { display: grid; gap: 10px; }
+.slot { display: grid; gap: 10px; padding: 12px; border: 1px dashed #cfd4d8; border-radius: 10px; background: var(--side); }
+.slot.filled { border-style: solid; border-color: var(--line); background: #fff; }
+.slot-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 28px; }
+.slot-head strong { font-size: 13px; font-weight: 600; }
+.slot-head select { max-width: 220px; }
+.slot-pick, .slot-new { display: grid; gap: 8px; }
+.slot-pick .btn { justify-self: start; }
+.slot-pick .picker-results { max-height: 180px; }
+.slot-sizes { display: grid; gap: 6px; }
+.size-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.size-chip { position: relative; display: inline-flex; }
+.size-chip input { position: absolute; inset: 0; opacity: 0; margin: 0; cursor: pointer; }
+.size-chip span { min-width: 40px; padding: 6px 10px; border: 1px solid #cfd4d8; border-radius: 999px; text-align: center; font-size: 12.5px; background: #fff; color: var(--muted); text-decoration: line-through; user-select: none; }
+.size-chip input:checked + span { background: var(--ink); border-color: var(--ink); color: #fff; text-decoration: none; }
+.size-chip input:focus-visible + span { outline: 2px solid var(--ink); outline-offset: 2px; }
+.size-chip input:disabled + span { opacity: .5; cursor: not-allowed; }
+#slot-add { justify-self: start; margin-top: 2px; }
+
+/* ---------- Produtos: seleção múltipla ---------- */
+.check-col { width: 40px; padding-right: 0 !important; }
+.check-col input { width: 17px; height: 17px; cursor: pointer; accent-color: var(--ink); vertical-align: middle; }
+tr.selected td { background: var(--info-bg); }
+#bulk { position: sticky; top: 0; z-index: 5; }
+.bulk-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 0 0 12px; padding: 10px 12px; border: 1px solid #cdd6e3; border-radius: 8px; background: var(--info-bg); box-shadow: 0 4px 12px rgba(0,0,0,.06); }
+.bulk-bar .grow { flex: 1; }
+.btn.link { border-color: transparent; background: none; text-decoration: underline; padding-left: 4px; padding-right: 4px; }
+@media (max-width: 600px) { .bulk-bar .grow { display: none; } .bulk-bar strong { width: 100%; } }

@@ -39,7 +39,7 @@
       if (item.type === 'piece') {
         if (look.pieces[item.piece]) add(look.pieces[item.piece], item.size);
       } else {                      // conjunto completo = todas as peças do look
-        look.pieces.forEach(p => add(p, p.kind === 'shoes' ? item.shoe : item.size));
+        look.pieces.forEach(p => add(p, p.kind === 'shoes' ? item.shoe : p.kind === 'accessory' ? 'U' : item.size));
       }
     });
     return [...lines.values()];
@@ -88,7 +88,7 @@
     $('checkout-lines').innerHTML = lines.map(l => `
       <li>
         <span class="cart-thumb">${pieceThumb(l.piece)}</span>
-        <span class="line-info">${escapeHtml(l.piece.name)}<small>${escapeHtml(l.piece.colorName)} · ${l.piece.kind === 'shoes' ? 'Número' : 'Tamanho'} ${escapeHtml(l.size)}${l.qty > 1 ? ` · ${l.qty} unid.` : ''}</small></span>
+        <span class="line-info">${escapeHtml(l.piece.name)}<small>${escapeHtml(l.piece.colorName)} · ${l.piece.kind === 'shoes' ? 'Número' : 'Tamanho'} ${escapeHtml(l.size === 'U' ? 'único' : l.size)}${l.qty > 1 ? ` · ${l.qty} unid.` : ''}</small></span>
         <span class="line-price">${money(l.piece.price * l.qty)}</span>
       </li>`).join('');
     $('checkout-subtotal').textContent = money(subtotal);
@@ -349,7 +349,7 @@
           <span class="order-status" data-status="${escapeHtml(o.status)}">${escapeHtml(STATUS_LABEL[o.status] || o.status)}</span>
         </div>
         <p class="muted">${new Date(o.created_at).toLocaleDateString('pt-PT', { day: 'numeric', month: 'long', year: 'numeric' })}</p>
-        <ul>${o.order_items.map(i => `<li>${i.qty} × ${escapeHtml(i.name)} <small>${escapeHtml(i.color_name)} · ${escapeHtml(i.size)}</small><span>${money(i.unit_price * i.qty)}</span></li>`).join('')}</ul>
+        <ul>${o.order_items.map(i => `<li>${i.qty} × ${escapeHtml(i.name)} <small>${escapeHtml(i.color_name)} · ${escapeHtml(i.size === 'U' ? 'Tamanho único' : i.size)}</small><span>${money(i.unit_price * i.qty)}</span></li>`).join('')}</ul>
         <div class="order-foot"><span>Total${Number(o.shipping_cost) === 0 ? ' (portes grátis)' : ''}</span><strong>${money(Number(o.total))}</strong></div>
         ${o.status === 'pending_payment' ? `<button type="button" class="primary pay-btn" data-pay="${escapeHtml(o.id)}" data-number="${o.number}" data-total="${Number(o.total)}">Pagar agora · ${money(Number(o.total))}</button>` : ''}
       </article>`).join('');
